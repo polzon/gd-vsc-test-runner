@@ -3,6 +3,7 @@
   "displayName": "gdscript-test-runner",
   "description": "gdUnit4 test runner for GDScript tests",
   "version": "0.0.1",
+  "publisher": "polzon",
   "engines": {
     "vscode": "^1.120.0"
   },
