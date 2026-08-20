@@ -54,4 +54,19 @@ suite('resolveGodot', () => {
             assert.match(result.godot.version, /^\d+\.\d+/);
         }
     });
+
+    test('returns real-version when probing the real Godot executable', () => {
+        // Requires `godot` on PATH; present in the development environment.
+        const result = resolveGodot(undefined);
+        assert.strictEqual(result.ok, true);
+        if (result.ok) {
+            // Current version in testing. Test may become unreliable later on.
+            const expectedProbeResult: GodotProbe = () => ({ ok: true, version: '4.7.2.stable.official.ed1daf0bf' });
+            const probeResult = resolveGodot(result.godot.path, expectedProbeResult);
+            assert.strictEqual(probeResult.ok, true);
+            if (probeResult.ok) {
+                assert.strictEqual(probeResult.godot.version, result.godot.version);
+            }
+        }
+    });
 });
