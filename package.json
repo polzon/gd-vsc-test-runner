@@ -18,7 +18,17 @@
         "command": "gdscript-test-runner.helloWorld",
         "title": "Hello World"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "GDScript Test Runner",
+      "properties": {
+        "gdscriptTestRunner.godotExecutable": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the Godot executable. Leave empty to resolve 'godot' from PATH."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

@@ -1,6 +1,8 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { getConfiguredGodotPath } from './godot/configuration';
+import { resolveGodot } from './godot/godotResolver';
 
 var output: vscode.OutputChannel;
 
@@ -23,6 +25,15 @@ export function activate(context: vscode.ExtensionContext) {
 
 	setupOutputChannel();
 	output.appendLine('GDScript Test Runner activated.');
+
+	const configured = getConfiguredGodotPath();
+	const result = resolveGodot(configured);
+	if (result.ok) {
+		output.appendLine(`Godot resolved (${result.godot.source}): ${result.godot.path}`);
+		output.appendLine(`Godot version: ${result.godot.version}`);
+	} else {
+		output.appendLine(`Godot resolution failed [${result.error.code}]: ${result.error.message}`);
+	}
 
 	context.subscriptions.push(disposable);
 }
