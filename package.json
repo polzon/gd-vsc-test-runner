@@ -8,17 +8,13 @@
     "vscode": "^1.120.0"
   },
   "categories": [
-    "Other"
+    "Testing"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "workspaceContains:**/project.godot"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "gdscript-test-runner.helloWorld",
-        "title": "Hello World"
-      }
-    ],
     "configuration": {
       "title": "GDScript Test Runner",
       "properties": {

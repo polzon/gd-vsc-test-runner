@@ -1,52 +1,44 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { getConfiguredGodotPath } from './godot/configuration';
 import { resolveGodot } from './godot/godotResolver';
+import { RunOrchestrator } from './testing/runOrchestrator';
+import { TestTree } from './testing/testTree';
 
-var output: vscode.OutputChannel;
+/** Exposed to the extension's own integration tests. */
+export interface ExtensionApi {
+	controller: vscode.TestController;
+	tree: TestTree;
+}
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
+export function activate(context: vscode.ExtensionContext): ExtensionApi {
+	const output = vscode.window.createOutputChannel('GDScript Test Runner');
+	const log = (message: string): void => output.appendLine(message);
+	log('GDScript Test Runner activated.');
+	logGodotResolution(log);
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "gdscript-test-runner" is now active!');
+	const controller = vscode.tests.createTestController('gdscriptTestRunner', 'GDScript Tests');
+	const tree = new TestTree(controller, log);
+	const orchestrator = new RunOrchestrator(controller, tree, log);
+	controller.createRunProfile(
+		'Run',
+		vscode.TestRunProfileKind.Run,
+		(request, token) => orchestrator.run(request, token),
+		true,
+	);
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('gdscript-test-runner.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from gdscript-test-runner!');
-	});
+	context.subscriptions.push(output, controller, tree);
+	void tree.discover();
+	return { controller, tree };
+}
 
-	setupOutputChannel();
-	output.appendLine('GDScript Test Runner activated.');
+export function deactivate(): void { }
 
-	const configured = getConfiguredGodotPath();
-	const result = resolveGodot(configured);
+function logGodotResolution(log: (message: string) => void): void {
+	const result = resolveGodot(getConfiguredGodotPath());
 	if (result.ok) {
-		output.appendLine(`Godot resolved (${result.godot.source}): ${result.godot.path}`);
-		output.appendLine(`Godot version: ${result.godot.version}`);
+		log(`Godot resolved (${result.godot.source}): ${result.godot.path}`);
+		log(`Godot version: ${result.godot.version}`);
 	} else {
-		output.appendLine(`Godot resolution failed [${result.error.code}]: ${result.error.message}`);
+		log(`Godot resolution failed [${result.error.code}]: ${result.error.message}`);
 	}
-
-	context.subscriptions.push(disposable);
-}
-
-// This method is called when your extension is deactivated
-export function deactivate() { }
-
-
-export function setupOutputChannel(): void {
-	output = vscode.window.createOutputChannel('GDScript Test Runner');
-}
-
-
-export function getOutputChannel(): vscode.OutputChannel {
-	return output;
 }

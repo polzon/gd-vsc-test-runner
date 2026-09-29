@@ -21,26 +21,27 @@ suite('mockAdapter', () => {
     });
 
     test('parseResults returns the fixed set and returns copies', () => {
-        const first = mockAdapter.parseResults('ignored');
+        const first = mockAdapter.parseResults('ignored', '/proj');
         assert.strictEqual(first.length, 3);
         assert.strictEqual(first[1].status, 'failed');
         assert.strictEqual(first[1].message, 'expected 5, got 4');
 
         // Mutation of a returned result must not corrupt the shared fixture.
         first[0].name = 'corrupted';
-        const second = mockAdapter.parseResults('ignored');
+        const second = mockAdapter.parseResults('ignored', '/proj');
         assert.strictEqual(second[0].name, 'test_addition');
     });
 
     test('buildRunArgs maps include files and exclude tests', () => {
         const args = mockAdapter.buildRunArgs({
+            projectRoot: '/proj',
             includeFiles: ['/proj/test_1.gd', '/proj/test_2.gd'],
-            excludeTests: ['test_addition'],
+            excludeTests: [{ file: '/proj/test_1.gd', name: 'test_addition' }],
         });
         assert.deepStrictEqual(args, [
             '--file', '/proj/test_1.gd',
             '--file', '/proj/test_2.gd',
-            '--exclude', 'test_addition',
+            '--exclude', '/proj/test_1.gd:test_addition',
         ]);
     });
 });

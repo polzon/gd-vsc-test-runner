@@ -140,9 +140,9 @@ interface TestFrameworkAdapter {
   - File filter: files matching `test_*.gd`.
   - Test cases: functions named `test_*` via a simple regex.
   - Parameterized test discovery is **out of scope for now**.
-- **Invocation:** run the GdUnit4 command-line tool
-  (`res://addons/gdUnit4/bin/GdUnitCmdTool.gd` via `runtest.sh`/`runtest.cmd`)
-  with Godot headless.
+- **Invocation:** run `res://addons/gdUnit4/bin/GdUnitCmdTool.gd` directly through Godot, with
+  the same flags as `runtest.cmd/.sh`. It runs non-headless because GdUnit4 rejects headless mode by
+  default.
 
 ## 6. Decisions log
 
@@ -158,15 +158,17 @@ interface TestFrameworkAdapter {
 
 ## 7. Open questions / next steps
 
-- [ ] Verify GdUnit4's exact CLI output format so `parseResults` can map it
-      reliably (needs a real run against a sample project).
-- [ ] Decide the exact VS Code settings schema and names.
-- [ ] Confirm multi-workspace / multi-project handling requirements.
-- [ ] Determine how to present "no framework detected" vs. "Godot not found" to
-      the user.
-- [ ] Spike: minimal end-to-end flow (detect Godot → detect GdUnit4 → discover one
-      `test_*.gd` → run → parse stdout → report) before building the full adapter
-      surface.
+- [x] Verify GdUnit4's exact CLI output format so `parseResults` can map it
+      reliably. Captured from a real run in `src/test/fixtures/gdunit4-output.txt`.
+- [x] Decide the exact VS Code settings schema and names (`gdscriptTestRunner.godotExecutable`).
+- [x] Multi-project handling: every `project.godot` in the workspace is a project, and each run spawns
+      one framework invocation per project.
+- [x] "Godot not found" marks the requested tests as errored and shows a notification with an
+      "Open Settings" action. "No framework detected" is logged to the output channel.
+- [x] End-to-end flow (detect Godot → detect GdUnit4 → discover → run → parse stdout → report).
+- [ ] Debug profile.
+- [ ] Parameterized test discovery.
+- [ ] Optional headless mode (`--headless --ignoreHeadlessMode`) to avoid the Godot window.
 
 ## 8. Verified facts (research notes)
 
@@ -181,3 +183,9 @@ interface TestFrameworkAdapter {
   failures / `101` warnings; generates `results.xml` (JUnit) + HTML only when
   report generation is used.
 - GdUnit4 v6.x requires Godot 4.5+.
+- GdUnit4 runs a single test via `-a res://file.gd -i res://file.gd:other_test` (there is no
+  per-test include). `-i res://addons` keeps the addon's own suites out of a whole-project run.
+- `-rd <dir>` redirects reports (an absolute path works). The extension writes them to the OS temp dir.
+- The CI runner uses the *detailed* console reporter: `res://path.gd > test_name STARTED`, then
+  `... PASSED|FAILED|SKIPPED|WARNING|FLAKY <elapsed>`, followed by an optional `Report:` block whose
+  stack frames look like `at 'test_name' in res://path.gd:<line>`.

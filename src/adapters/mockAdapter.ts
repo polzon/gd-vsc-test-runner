@@ -44,12 +44,12 @@ export const mockAdapter: TestFrameworkAdapter = {
         for (const file of request.includeFiles) {
             args.push('--file', file);
         }
-        for (const name of request.excludeTests) {
-            args.push('--exclude', name);
+        for (const test of request.excludeTests) {
+            args.push('--exclude', `${test.file}:${test.name}`);
         }
         return args;
     },
-    parseResults(_rawOutput: string): TestResult[] {
+    parseResults(_rawOutput: string, _projectRoot: string): TestResult[] {
         return MOCK_RESULTS.map((r) => ({ ...r }));
     },
 };

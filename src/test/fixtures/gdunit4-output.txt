@@ -1,0 +1,34 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+OpenGL API 4.6 (Core Profile) Mesa 26.3.0-devel (git-e3fc7749c6) - Compatibility - Using Device: Microsoft - D3D12 (Qualcomm(R) Adreno(TM) X1-85 GPU)
+
+[2J[H[38;2;233;150;122m
+--------------------------------------------------------------------------------------------------
+GdUnit4 Comandline Tool
+--------------------------------------------------------------------------------------------------[0m
+[38;2;0;191;255mDisabled fail fast![0m
+Scanning for test suites in: res://test
+[38;2;100;149;237mInstalling GdUnit4 session system hooks.[0m
+[38;2;100;149;237mSession hook 'GdUnitHtmlTestReporter' installed.[0m
+[38;2;100;149;237mSession hook 'GdUnitXMLTestReporter' installed.[0m
+[38;2;0;206;209mRun Test Suite: [0m[38;2;250;235;215mres://test/test_example_test.gd[0m
+  [38;2;250;235;215mres://test/test_example_test.gd[0m[38;2;128;128;128m > [0m[38;2;250;235;215mtest_success[0m[38;2;34;139;34m STARTED[0m[38;2;128;128;128m[0m
+  [38;2;250;235;215mres://test/test_example_test.gd[0m[38;2;128;128;128m > [0m[38;2;250;235;215mtest_success[0m[38;2;34;139;34m PASSED[0m[38;2;100;149;237m 29ms[0m
+[38;2;128;128;128m[0m
+  [38;2;250;235;215mres://test/test_example_test.gd[0m[38;2;128;128;128m > [0m[38;2;250;235;215mtest_failure[0m[38;2;34;139;34m STARTED[0m[38;2;128;128;128m[0m
+  [38;2;250;235;215mres://test/test_example_test.gd[0m[38;2;128;128;128m > [0m[38;2;250;235;215mtest_failure[0m[38;2;178;34;34m[1m FAILED[0m[38;2;100;149;237m 29ms[0m
+  [38;2;0;206;209m[1m[4mReport:[0m
+  [38;2;128;128;128m[38;2;255;69;0mExpecting:[0m '[38;2;30;144;255mtrue[0m' but is '[38;2;30;144;255mfalse[0m'
+[38;2;50;205;50m[1mAdditional info:[0m[38;2;50;205;50m[0m
+ This is supposed to fail.[0m[38;2;173;216;230m	at 'test_failure' in res://test/test_example_test.gd:10[0m[38;2;128;128;128m[0m
+[38;2;128;128;128m[0m
+[38;2;30;144;255mStatistics:[0m[38;2;128;128;128m 2 test cases | 0 errors | 1 failures | 0 flaky | 0 skipped | 0 orphans |[0m[38;2;34;139;34m PASSED[0m[38;2;100;149;237m 164ms[0m
+[38;2;128;128;128m[0m
+[38;2;128;128;128m[0m
+[38;2;30;144;255mOverall Summary:[0m[38;2;255;255;255m 2 test cases | 0 errors | 1 failures | 0 flaky | 0 skipped | 0 orphans |[0m
+[38;2;233;150;122mExecuted test suites: (1/1)[0m
+[38;2;233;150;122mExecuted test cases : (2/2)[0m
+[38;2;233;150;122mTotal execution time: 164ms[0m
+[38;2;255;255;255m [0m[38;2;100;149;237mOpen XML Report at: file://C:/Users/Zack/Documents/gdscript-test-runner/src/demo/gdunit4-adapter-demo/reports/report_2/results.xml[0m
+[38;2;100;149;237mOpen HTML Report at: file://C:/Users/Zack/Documents/gdscript-test-runner/src/demo/gdunit4-adapter-demo/reports/report_2/index.html[0m
+[38;2;178;34;34mExit code: 100[0m
+Run dispose test resources
