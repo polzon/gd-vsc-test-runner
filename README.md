@@ -1,71 +1,47 @@
-# gdscript-test-runner README
+# GDScript Test Runner
 
-This is the README for your extension "gdscript-test-runner". After writing up a brief description, we recommend including the following sections.
+Runs GDScript unit tests from the VS Code Testing view. This extension only runs tests. Editing, linting and
+language support are handled by the Godot executable and extensions like `godot-tools`.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- Finds every Godot project (`project.godot`) in the workspace and detects its test framework.
+- Lists test files and their test cases in the Test Explorer, with run buttons in the editor gutter.
+- Runs a whole project, a single file or a single test, then shows pass/fail/skip results, failure messages with
+  source locations, and the full Godot output.
+- Updates the test tree when you create, edit or delete test files.
+- Stops the Godot process when you cancel a run.
 
-For example if there is an image subfolder under your extension project workspace:
+### Supported frameworks
 
-\!\[feature X\]\(images/feature-x.png\)
+| Framework                                       | Detection                          | Test files   | Test cases            |
+| ----------------------------------------------- | ---------------------------------- | ------------ | --------------------- |
+| [GdUnit4](https://github.com/godot-gdunit-labs/gdUnit4) (6.x) | `addons/gdUnit4/` in the project | `test_*.gd` that `extends GdUnitTestSuite` | top-level `func test_*` |
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+Anything under `addons/` and `.godot/` is ignored during discovery.
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- The Godot 4 editor executable (GdUnit4 6.x needs Godot 4.5+).
+- A supported test framework installed in the Godot project.
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+- `gdscriptTestRunner.godotExecutable`: absolute path to the Godot executable. When empty, `godot` (`godot.exe` on
+  Windows) is looked up on `PATH`. If you set a path that doesn't exist, you get an error. The extension does not
+  fall back to `PATH` in that case.
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+- GdUnit4 rejects headless mode, so every run briefly opens a Godot window, just like GdUnit4's own `runtest`
+  scripts.
+- Parameterized tests are not discovered separately.
+- There is no debug profile yet.
+- GdUnit4 HTML/XML reports are written to the OS temp directory instead of the project's `reports/` folder.
 
-## Release Notes
+## Development
 
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+- `npm run compile`: type-check, lint and bundle.
+- `npm test`: runs the unit and integration tests in a VS Code test host opened on
+  `src/demo/gdunit4-adapter-demo`. The integration tests need `godot` on `PATH`.
+- `F5`: launches the Extension Development Host with the demo project open.
