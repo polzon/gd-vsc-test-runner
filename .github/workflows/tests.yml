@@ -3,7 +3,15 @@ name: Unit tests
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
   workflow_dispatch:
 
 concurrency:
@@ -17,8 +25,12 @@ jobs:
   test:
     name: Unit tests
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v7
         with:
@@ -28,12 +40,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Reuses the ~332 MB VS Code download from @vscode/test-electron instead
+      # of re-fetching it on every run. Bump the key when VS Code stable advances.
+      - name: Cache VS Code test binary
+        uses: actions/cache@v6
+        with:
+          path: .vscode-test
+          key: vscode-test-${{ runner.os }}-1.140.0
+
+      # Cached separately from npm so a package-lock change does not invalidate it.
+      - name: Cache Godot
+        id: cache-godot
+        uses: actions/cache@v6
+        with:
+          path: ~/godot-bin
+          key: godot-${{ env.GODOT_VERSION }}-x86_64
+
       - name: Install Godot
         run: |
-          curl -fLo /tmp/godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
-          unzip -o /tmp/godot.zip -d /tmp/godot
-          sudo mv "/tmp/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
-          sudo chmod +x /usr/local/bin/godot
+          if [ -x "$HOME/godot-bin/godot" ]; then
+            sudo cp "$HOME/godot-bin/godot" /usr/local/bin/godot
+            sudo chmod +x /usr/local/bin/godot
+          else
+            curl -fLo /tmp/godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+            unzip -o /tmp/godot.zip -d /tmp/godot
+            sudo mv "/tmp/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
+            sudo chmod +x /usr/local/bin/godot
+            mkdir -p "$HOME/godot-bin"
+            cp /usr/local/bin/godot "$HOME/godot-bin/godot"
+          fi
           godot --version
 
       - name: Import demo project
