@@ -4,6 +4,10 @@
   "description": "gdUnit4 test runner for GDScript tests",
   "version": "0.0.1",
   "publisher": "polzon",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/polzon/gd-vsc-test-runner.git"
+  },
   "engines": {
     "vscode": "^1.120.0"
   },
