@@ -55,12 +55,18 @@ export interface RunRequestInfo {
     excludeTests: TestRef[];
 }
 
+/** The project file being parsed, for adapters that need to resolve references across files. */
+export interface DiscoveryContext {
+    projectRoot: string;
+    file: string;
+}
+
 /** Discovery rules supplied by each adapter. */
 export interface DiscoveryRules {
     /** Glob, relative to the project root, identifying this framework's test files. */
     fileFilter: string;
     /** Extract test cases from file contents. */
-    parseTestCases(content: string): TestCaseDescriptor[];
+    parseTestCases(content: string, context?: DiscoveryContext): Promise<TestCaseDescriptor[]>;
 }
 
 /**

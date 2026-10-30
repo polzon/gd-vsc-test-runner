@@ -1,9 +1,11 @@
 import { promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { baseTarget, classResolver } from '../godot/classResolver';
 import { toResPath } from '../godot/resPath';
 import { parseGdUnit4Output } from './gdunit4Output';
 import {
+    DiscoveryContext,
     DiscoveryRules,
     RunRequestInfo,
     TestCaseDescriptor,
@@ -17,15 +19,32 @@ const CMD_TOOL = 'res://addons/gdUnit4/bin/GdUnitCmdTool.gd';
 /** Reports go to a temp dir so runs don't litter the user's project with `res://reports/report_N`. */
 const REPORT_DIR = path.join(os.tmpdir(), 'gdscript-test-runner', 'gdunit4-reports');
 
-/** `extends GdUnitTestSuite`, optionally after `class_name X`, or extending the suite script by path. */
-const EXTENDS_TEST_SUITE =
-    /^(?:class_name\s+\w+\s+)?extends\s+(?:GdUnitTestSuite\b|["'][^"']*GdUnitTestSuite\.gd["'])/m;
+const SUITE_CLASS = 'GdUnitTestSuite';
 
 /** A top-level `func test_*(` declaration. */
 const TEST_FUNC = /^(?:static\s+)?func\s+(test_\w+)\s*\(/;
 
-function parseTestCases(content: string): TestCaseDescriptor[] {
-    if (!EXTENDS_TEST_SUITE.test(content)) {
+function isSuiteTarget(target: string): boolean {
+    return target === SUITE_CLASS || target.endsWith(`/${SUITE_CLASS}.gd`);
+}
+
+async function extendsTestSuite(content: string, context?: DiscoveryContext): Promise<boolean> {
+    const target = baseTarget(content);
+    if (!target) {
+        return false;
+    }
+    if (isSuiteTarget(target)) {
+        return true;
+    }
+    if (!context) {
+        return false;
+    }
+    const lineage = await classResolver(context.projectRoot).lineage(content, context.file);
+    return lineage.some(isSuiteTarget);
+}
+
+async function parseTestCases(content: string, context?: DiscoveryContext): Promise<TestCaseDescriptor[]> {
+    if (!(await extendsTestSuite(content, context))) {
         return [];
     }
     const lines = content.split(/\r?\n/);

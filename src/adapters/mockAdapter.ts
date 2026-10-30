@@ -1,4 +1,5 @@
 import {
+    DiscoveryContext,
     DiscoveryRules,
     RunRequestInfo,
     TestCaseDescriptor,
@@ -20,7 +21,7 @@ const MOCK_RESULTS: TestResult[] = [
 
 const discovery: DiscoveryRules = {
     fileFilter: '**/test_*.gd',
-    parseTestCases(_content: string): TestCaseDescriptor[] {
+    async parseTestCases(_content: string, _context?: DiscoveryContext): Promise<TestCaseDescriptor[]> {
         return MOCK_TEST_CASES.map((t) => ({ ...t, range: { ...t.range } }));
     },
 };

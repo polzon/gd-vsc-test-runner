@@ -38,8 +38,8 @@ suite('GdUnit4 Adapter', () => {
         assert.strictEqual(gdunit4Adapter.discovery.fileFilter, '**/test_*.gd');
     });
 
-    test('discovers top-level test_ functions with their body ranges', () => {
-        const cases = gdunit4Adapter.discovery.parseTestCases(SUITE);
+    test('discovers top-level test_ functions with their body ranges', async () => {
+        const cases = await gdunit4Adapter.discovery.parseTestCases(SUITE);
         assert.deepStrictEqual(cases, [
             {
                 name: 'test_success',
@@ -52,21 +52,41 @@ suite('GdUnit4 Adapter', () => {
         ]);
     });
 
-    test('ignores files that do not extend GdUnitTestSuite', () => {
-        const cases = gdunit4Adapter.discovery.parseTestCases('extends Node\n\nfunc test_x():\n\tpass\n');
+    test('ignores files that do not extend GdUnitTestSuite', async () => {
+        const cases = await gdunit4Adapter.discovery.parseTestCases('extends Node\n\nfunc test_x():\n\tpass\n');
         assert.deepStrictEqual(cases, []);
     });
 
-    test('accepts class_name and path-based extends', () => {
+    test('accepts class_name and path-based extends', async () => {
         const byClassName = 'class_name MyTest extends GdUnitTestSuite\nfunc test_a():\n\tpass\n';
         const byPath = 'extends "res://addons/gdUnit4/src/GdUnitTestSuite.gd"\nfunc test_b():\n\tpass\n';
-        assert.strictEqual(gdunit4Adapter.discovery.parseTestCases(byClassName)[0].name, 'test_a');
-        assert.strictEqual(gdunit4Adapter.discovery.parseTestCases(byPath)[0].name, 'test_b');
+        assert.strictEqual((await gdunit4Adapter.discovery.parseTestCases(byClassName))[0].name, 'test_a');
+        assert.strictEqual((await gdunit4Adapter.discovery.parseTestCases(byPath))[0].name, 'test_b');
     });
 
-    test('ignores indented (inner-class) test functions', () => {
+    test('ignores indented (inner-class) test functions', async () => {
         const content = 'extends GdUnitTestSuite\nclass Inner:\n\tfunc test_inner():\n\t\tpass\n';
-        assert.deepStrictEqual(gdunit4Adapter.discovery.parseTestCases(content), []);
+        assert.deepStrictEqual(await gdunit4Adapter.discovery.parseTestCases(content), []);
+    });
+
+    test('follows extends through project classes to GdUnitTestSuite', async () => {
+        const project = fs.mkdtempSync(path.join(os.tmpdir(), 'gdunit4-inherit-'));
+        try {
+            const baseDir = path.join(project, 'test', 'utils');
+            fs.mkdirSync(baseDir, { recursive: true });
+            fs.writeFileSync(
+                path.join(baseDir, 'gd_test_suite_extended.gd'),
+                '@abstract class_name GdTestSuiteExtended\nextends GdUnitTestSuite\n',
+            );
+            const file = path.join(project, 'test', 'test_inherited.gd');
+            const content = 'extends GdTestSuiteExtended\n\nfunc test_x():\n\tpass\n';
+            fs.writeFileSync(file, content);
+
+            const cases = await gdunit4Adapter.discovery.parseTestCases(content, { projectRoot: project, file });
+            assert.deepStrictEqual(cases.map((c) => c.name), ['test_x']);
+        } finally {
+            fs.rmSync(project, { recursive: true, force: true });
+        }
     });
 
     test('detects the addon and its version in the demo project', async () => {

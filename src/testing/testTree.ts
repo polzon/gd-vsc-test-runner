@@ -125,7 +125,10 @@ export class TestTree implements vscode.Disposable {
         }
         try {
             const text = content ?? await readText(item.uri);
-            const cases = data.project.adapter.discovery.parseTestCases(text);
+            const cases = await data.project.adapter.discovery.parseTestCases(text, {
+                projectRoot: data.project.root,
+                file: data.file,
+            });
             item.children.replace(cases.map((c) => {
                 const child = this.controller.createTestItem(testId(item, c.name), c.name, item.uri);
                 child.range = toRange(c.range);
