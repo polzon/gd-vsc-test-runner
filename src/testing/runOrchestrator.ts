@@ -216,14 +216,12 @@ export class RunOrchestrator {
             });
     }
 
-    /** File items covering the request: the files themselves, or the parents of selected tests. */
+    /** File items covering the request: the files themselves, or the parent of a selected test. */
     private fileItemsOf(include: vscode.TestItem[] | undefined): vscode.TestItem[] {
         if (!include) {
             return this.tree.fileItems();
         }
-        return [
-            ...new Set(include.map((i) => (this.tree.getData(i)?.kind === 'test' ? i.parent! : i))),
-        ];
+        return [...new Set(include.flatMap((item) => this.tree.fileItemsIn(item)))];
     }
 
     private projectOf(item: vscode.TestItem): GodotProject | undefined {
@@ -236,9 +234,16 @@ export class RunOrchestrator {
             if (!data) {
                 return [];
             }
-            return data.kind === 'test'
-                ? [{ file: data.file, test: data.name }]
-                : [{ file: data.file }];
+            if (data.kind === 'test') {
+                return [{ file: data.file, test: data.name }];
+            }
+            if (data.kind === 'file') {
+                return [{ file: data.file }];
+            }
+            return this.tree.fileItemsIn(item).flatMap((fileItem): Selection[] => {
+                const fileData = this.tree.getData(fileItem);
+                return fileData?.kind === 'file' ? [{ file: fileData.file }] : [];
+            });
         });
     }
 }

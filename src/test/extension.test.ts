@@ -57,16 +57,24 @@ suite('Extension (demo project)', function () {
     });
 
     test('discovers the demo suite and its test cases, ignoring addon suites', async () => {
-        const files: vscode.TestItem[] = [];
-        api.controller.items.forEach((item) => files.push(item));
+        const files = api.tree.fileItems();
         assert.deepStrictEqual(
             files.map((f) => f.uri?.fsPath.toLowerCase()),
             [SUITE_FILE.toLowerCase()],
         );
 
+        const topLevel: vscode.TestItem[] = [];
+        api.controller.items.forEach((item) => topLevel.push(item));
+        assert.deepStrictEqual(
+            topLevel.map((item) => item.label),
+            ['test'],
+        );
+        const fileItem = topLevel[0].children.get(vscode.Uri.file(SUITE_FILE).toString());
+        assert.ok(fileItem);
+
         await api.tree.ensureResolved();
         const names: string[] = [];
-        files[0].children.forEach((child) => names.push(child.label));
+        fileItem.children.forEach((child) => names.push(child.label));
         assert.deepStrictEqual(names.sort(), ['test_failure', 'test_success']);
         assert.strictEqual(api.tree.findTest(SUITE_FILE, 'test_success')?.range?.start.line, 3);
     });
@@ -75,7 +83,7 @@ suite('Extension (demo project)', function () {
         const before = api.tree.findTest(SUITE_FILE, 'test_success');
         assert.ok(before);
         await Promise.all([api.tree.refresh(), api.tree.refresh()]);
-        const fileItem = api.controller.items.get(vscode.Uri.file(SUITE_FILE).toString());
+        const fileItem = api.tree.fileItems()[0];
         assert.strictEqual(api.controller.items.size, 1);
         assert.strictEqual(fileItem?.children.size, 2);
         assert.ok(api.tree.findTest(SUITE_FILE, 'test_success'));
