@@ -12,8 +12,8 @@ suite('mockAdapter', () => {
         assert.strictEqual(await mockAdapter.detectVersion('/any/path'), '0.0.0-mock');
     });
 
-    test('discovery returns the fixed set of test cases', () => {
-        const cases = mockAdapter.discovery.parseTestCases('ignored');
+    test('discovery returns the fixed set of test cases', async () => {
+        const cases = await mockAdapter.discovery.parseTestCases('ignored');
         assert.strictEqual(cases.length, 3);
         assert.strictEqual(cases[0].name, 'test_addition');
         assert.strictEqual(cases[1].name, 'test_subtraction');

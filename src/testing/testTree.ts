@@ -125,7 +125,10 @@ export class TestTree implements vscode.Disposable {
         }
         try {
             const text = content ?? await readText(item.uri);
-            const cases = data.project.adapter.discovery.parseTestCases(text);
+            const cases = await data.project.adapter.discovery.parseTestCases(text, {
+                projectRoot: data.project.root,
+                file: data.file,
+            });
             item.children.replace(cases.map((c) => {
                 const child = this.controller.createTestItem(testId(item, c.name), c.name, item.uri);
                 child.range = toRange(c.range);
@@ -182,20 +185,48 @@ export class TestTree implements vscode.Disposable {
     private watch(project: GodotProject): void {
         const pattern = new vscode.RelativePattern(project.root, project.adapter.discovery.fileFilter);
         const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+        const invalidate = (): void => project.adapter.discovery.invalidate?.(project.root);
         watcher.onDidCreate((uri) => {
+            invalidate();
             const item = this.getOrCreateFile(project, uri);
             if (item) {
                 void this.resolveFile(item);
             }
         });
         watcher.onDidChange((uri) => {
+            invalidate();
             const item = this.controller.items.get(uri.toString());
             if (item) {
                 void this.resolveFile(item);
             }
         });
-        watcher.onDidDelete((uri) => this.controller.items.delete(uri.toString()));
+        watcher.onDidDelete((uri) => {
+            invalidate();
+            this.controller.items.delete(uri.toString());
+        });
         this.watchers.push(watcher);
+
+        const sources = vscode.workspace.createFileSystemWatcher(
+            new vscode.RelativePattern(project.root, '**/*.gd'),
+        );
+        const onSourceChange = (uri: vscode.Uri): void => {
+            if (this.controller.items.get(uri.toString())) {
+                return;
+            }
+            invalidate();
+            void this.revalidate(project);
+        };
+        sources.onDidCreate(onSourceChange);
+        sources.onDidChange(onSourceChange);
+        sources.onDidDelete(onSourceChange);
+        this.watchers.push(sources);
+    }
+
+    /** Re-parse this project's test files after a source script changes. */
+    private async revalidate(project: GodotProject): Promise<void> {
+        for (const item of this.fileItems(project)) {
+            await this.resolveFile(item);
+        }
     }
 
     private onDocument(doc: vscode.TextDocument): void {
