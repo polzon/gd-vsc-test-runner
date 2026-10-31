@@ -69,9 +69,7 @@ suite('Extension (demo project)', function () {
             topLevel.map((item) => item.label),
             ['test'],
         );
-        const fileItem = topLevel[0].children.get(
-            vscode.Uri.file(SUITE_FILE).toString(),
-        );
+        const fileItem = topLevel[0].children.get(vscode.Uri.file(SUITE_FILE).toString());
         assert.ok(fileItem);
 
         await api.tree.ensureResolved();
