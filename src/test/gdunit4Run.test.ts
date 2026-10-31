@@ -10,7 +10,8 @@ const SUITE_FILE = path.join(DEMO_PROJECT, 'test', 'test_example_test.gd');
 
 /**
  * End-to-end: build args → run the real Godot + GdUnit4 → parse stdout.
- * Requires `godot` on PATH (present in the development environment) and opens a Godot window briefly.
+ * Requires `godot` on PATH (present in the development environment) and opens a
+ * Godot window briefly.
  */
 suite('GdUnit4 run against the demo project', function () {
     this.timeout(120_000);
@@ -22,7 +23,11 @@ suite('GdUnit4 run against the demo project', function () {
     }
 
     async function run(excludeTests: { file: string; name: string }[] = []) {
-        const args = gdunit4Adapter.buildRunArgs({ projectRoot: DEMO_PROJECT, includeFiles: [SUITE_FILE], excludeTests });
+        const args = gdunit4Adapter.buildRunArgs({
+            projectRoot: DEMO_PROJECT,
+            includeFiles: [SUITE_FILE],
+            excludeTests,
+        });
         const result = await runGodot(godotPath(), args, { cwd: DEMO_PROJECT });
         return { ...result, results: gdunit4Adapter.parseResults(result.stdout, DEMO_PROJECT) };
     }
@@ -40,12 +45,18 @@ suite('GdUnit4 run against the demo project', function () {
     test('runs a single test by excluding its siblings', async () => {
         const { exitCode, results } = await run([{ file: SUITE_FILE, name: 'test_failure' }]);
         assert.strictEqual(exitCode, 0);
-        assert.deepStrictEqual(results.map((r) => [r.name, r.status]), [['test_success', 'passed']]);
+        assert.deepStrictEqual(
+            results.map((r) => [r.name, r.status]),
+            [['test_success', 'passed']],
+        );
     });
 
     test('does not write reports into the project', () => {
         const reports = path.join(DEMO_PROJECT, 'reports');
         const entries = fs.existsSync(reports) ? fs.readdirSync(reports) : [];
-        assert.ok(!entries.some((e) => e !== 'report_1'), `unexpected reports: ${entries.join(', ')}`);
+        assert.ok(
+            !entries.some((e) => e !== 'report_1'),
+            `unexpected reports: ${entries.join(', ')}`,
+        );
     });
 });

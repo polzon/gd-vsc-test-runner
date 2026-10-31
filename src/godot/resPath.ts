@@ -22,6 +22,9 @@ export function fromResPath(projectRoot: string, resPath: string): string | unde
     if (!resPath.startsWith(RES_PREFIX)) {
         return undefined;
     }
-    const segments = resPath.slice(RES_PREFIX.length).split('/').filter((s) => s.length > 0);
+    const segments = resPath
+        .slice(RES_PREFIX.length)
+        .split('/')
+        .filter((s) => s.length > 0);
     return path.join(projectRoot, ...segments);
 }

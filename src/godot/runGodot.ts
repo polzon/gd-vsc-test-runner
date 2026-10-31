@@ -17,7 +17,11 @@ export interface GodotProcessOptions {
 }
 
 /** Run the Godot executable to completion, collecting stdout. */
-export function runGodot(executable: string, args: string[], options: GodotProcessOptions): Promise<GodotProcessResult> {
+export function runGodot(
+    executable: string,
+    args: string[],
+    options: GodotProcessOptions,
+): Promise<GodotProcessResult> {
     return new Promise((resolve) => {
         let stdout = '';
         const child = spawn(executable, args, { cwd: options.cwd, windowsHide: true });

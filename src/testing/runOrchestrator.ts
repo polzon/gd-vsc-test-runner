@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 import { TestResult } from '../adapters/types';
-import { getConfiguredGodotPath, CONFIG_SECTION, GODOT_EXECUTABLE_KEY } from '../godot/configuration';
+import {
+    getConfiguredGodotPath,
+    CONFIG_SECTION,
+    GODOT_EXECUTABLE_KEY,
+} from '../godot/configuration';
 import { resolveGodot } from '../godot/godotResolver';
 import { runGodot } from '../godot/runGodot';
 import { buildRunPlan, Selection } from './runPlan';
@@ -13,7 +17,10 @@ function toTerminal(text: string): string {
     return text.replace(/\r?\n/g, '\r\n');
 }
 
-/** Case/separator-insensitive key (via the file URI) for matching reported results to planned tests. */
+/**
+ * Case/separator-insensitive key (via the file URI) for matching reported
+ * results to planned tests.
+ */
 function testKey(file: string, name: string): string {
     return `${vscode.Uri.file(file).toString()}::${name}`;
 }
@@ -27,7 +34,7 @@ export class RunOrchestrator {
         private readonly controller: Pick<vscode.TestController, 'createTestRun'>,
         private readonly tree: TestTree,
         private readonly log: Log,
-    ) { }
+    ) {}
 
     async run(request: vscode.TestRunRequest, token: vscode.CancellationToken): Promise<void> {
         const run = this.controller.createTestRun(request);
@@ -38,7 +45,11 @@ export class RunOrchestrator {
         }
     }
 
-    private async execute(request: vscode.TestRunRequest, run: vscode.TestRun, token: vscode.CancellationToken) {
+    private async execute(
+        request: vscode.TestRunRequest,
+        run: vscode.TestRun,
+        token: vscode.CancellationToken,
+    ) {
         const include = request.include ? [...request.include] : undefined;
         await this.tree.ensureResolved(this.fileItemsOf(include));
 
@@ -54,7 +65,8 @@ export class RunOrchestrator {
             if (token.isCancellationRequested) {
                 break;
             }
-            const projectInclude = include && this.toSelections(include.filter((i) => this.projectOf(i) === project));
+            const projectInclude =
+                include && this.toSelections(include.filter((i) => this.projectOf(i) === project));
             if (projectInclude?.length === 0) {
                 continue;
             }
@@ -86,10 +98,12 @@ export class RunOrchestrator {
         }
 
         // Captured up front: results must go to these items even if the tree is re-parsed mid-run.
-        const byKey = new Map(plan.tests.flatMap((t) => {
-            const item = this.tree.findTest(t.file, t.name);
-            return item ? [[testKey(t.file, t.name), item] as const] : [];
-        }));
+        const byKey = new Map(
+            plan.tests.flatMap((t) => {
+                const item = this.tree.findTest(t.file, t.name);
+                return item ? [[testKey(t.file, t.name), item] as const] : [];
+            }),
+        );
         const items = [...byKey.values()];
         items.forEach((item) => run.started(item));
 
@@ -101,7 +115,9 @@ export class RunOrchestrator {
                 excludeTests: plan.excludeTests,
             });
         } catch (err) {
-            const message = new vscode.TestMessage(err instanceof Error ? err.message : String(err));
+            const message = new vscode.TestMessage(
+                err instanceof Error ? err.message : String(err),
+            );
             items.forEach((item) => run.errored(item, message));
             return;
         }
@@ -120,7 +136,9 @@ export class RunOrchestrator {
         cancellation.dispose();
 
         if (result.spawnError) {
-            const message = new vscode.TestMessage(`Failed to start Godot: ${result.spawnError.message}`);
+            const message = new vscode.TestMessage(
+                `Failed to start Godot: ${result.spawnError.message}`,
+            );
             items.forEach((item) => run.errored(item, message));
             return;
         }
@@ -139,10 +157,14 @@ export class RunOrchestrator {
             if (token.isCancellationRequested) {
                 run.skipped(item);
             } else {
-                run.errored(item, new vscode.TestMessage(
-                    `${project.adapter.displayName} reported no result for this test ` +
-                    `(exit code ${result.exitCode ?? 'n/a'}). See the test output for details.`,
-                ));
+                run.errored(
+                    item,
+                    new vscode.TestMessage(
+                        `${project.adapter.displayName} reported no result for this test ` +
+                            `(exit code ${result.exitCode ?? 'n/a'}). See the test output ` +
+                            'for details.',
+                    ),
+                );
             }
         }
     }
@@ -171,21 +193,27 @@ export class RunOrchestrator {
         }
     }
 
-    private reportGodotFailure(reason: string, include: vscode.TestItem[] | undefined, run: vscode.TestRun): void {
+    private reportGodotFailure(
+        reason: string,
+        include: vscode.TestItem[] | undefined,
+        run: vscode.TestRun,
+    ): void {
         this.log(`Cannot run tests: ${reason}`);
         const message = new vscode.TestMessage(`Cannot run tests: ${reason}`);
         for (const fileItem of this.fileItemsOf(include)) {
             fileItem.children.forEach((child) => run.errored(child, message));
         }
         const openSettings = 'Open Settings';
-        void vscode.window.showErrorMessage(`GDScript Test Runner: ${reason}`, openSettings).then((choice) => {
-            if (choice === openSettings) {
-                void vscode.commands.executeCommand(
-                    'workbench.action.openSettings',
-                    `${CONFIG_SECTION}.${GODOT_EXECUTABLE_KEY}`,
-                );
-            }
-        });
+        void vscode.window
+            .showErrorMessage(`GDScript Test Runner: ${reason}`, openSettings)
+            .then((choice) => {
+                if (choice === openSettings) {
+                    void vscode.commands.executeCommand(
+                        'workbench.action.openSettings',
+                        `${CONFIG_SECTION}.${GODOT_EXECUTABLE_KEY}`,
+                    );
+                }
+            });
     }
 
     /** File items covering the request: the files themselves, or the parents of selected tests. */
@@ -193,7 +221,9 @@ export class RunOrchestrator {
         if (!include) {
             return this.tree.fileItems();
         }
-        return [...new Set(include.map((i) => (this.tree.getData(i)?.kind === 'test' ? i.parent! : i)))];
+        return [
+            ...new Set(include.map((i) => (this.tree.getData(i)?.kind === 'test' ? i.parent! : i))),
+        ];
     }
 
     private projectOf(item: vscode.TestItem): GodotProject | undefined {
@@ -206,7 +236,9 @@ export class RunOrchestrator {
             if (!data) {
                 return [];
             }
-            return data.kind === 'test' ? [{ file: data.file, test: data.name }] : [{ file: data.file }];
+            return data.kind === 'test'
+                ? [{ file: data.file, test: data.name }]
+                : [{ file: data.file }];
         });
     }
 }

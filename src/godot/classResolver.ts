@@ -7,7 +7,10 @@ const ROOT_CLASSES = new Set(['Object', 'RefCounted', 'Node', 'Resource']);
 
 const TARGET = '("(?:[^"\\\\]|\\\\.)*"|\'[^\']*\'|[^\\s#]+)';
 
-/** A top-level `extends Foo`, `class_name Foo extends Bar` or path-based `extends "res://...gd"`. */
+/**
+ * A top-level `extends Foo`, `class_name Foo extends Bar` or path-based
+ * `extends "res://...gd"`.
+ */
 const CLASS_NAME_EXTENDS = new RegExp(
     `^(?:@[A-Za-z_]\\w*\\s+)*class_name\\s+\\w+\\s+extends\\s+${TARGET}`,
     'm',
@@ -62,7 +65,7 @@ export class GdScriptClassResolver {
     private generation = 0;
     private projectRealPath?: Promise<string | undefined>;
 
-    constructor(private readonly projectRoot: string) { }
+    constructor(private readonly projectRoot: string) {}
 
     /**
      * Names and paths in the inheritance chain, from the script's direct base upward.
@@ -113,13 +116,18 @@ export class GdScriptClassResolver {
         this.resetContentCache();
     }
 
-    private async findIn(index: Map<string, string>, className: string): Promise<string | undefined> {
+    private async findIn(
+        index: Map<string, string>,
+        className: string,
+    ): Promise<string | undefined> {
         const file = index.get(className);
         if (!file || !(await pathExists(file))) {
             return undefined;
         }
         const content = await this.read(file);
-        return content !== undefined && CLASS_NAME.exec(content)?.[1] === className ? file : undefined;
+        return content !== undefined && CLASS_NAME.exec(content)?.[1] === className
+            ? file
+            : undefined;
     }
 
     private async rebuild(): Promise<Map<string, string>> {
@@ -138,13 +146,18 @@ export class GdScriptClassResolver {
             return this.withinProject(fromResPath(this.projectRoot, target));
         }
         if (target.endsWith('.gd') || target.includes('/')) {
-            const resolved = path.isAbsolute(target) ? target : path.resolve(path.dirname(fromFile), target);
+            const resolved = path.isAbsolute(target)
+                ? target
+                : path.resolve(path.dirname(fromFile), target);
             return this.withinProject(resolved);
         }
         return this.find(target);
     }
 
-    /** Keep inheritance lookups inside the project, even for `..`, absolute targets, or symlinks. */
+    /**
+     * Keep inheritance lookups inside the project, even for `..`, absolute
+     * targets, or symlinks.
+     */
     private async withinProject(file: string | undefined): Promise<string | undefined> {
         if (!file) {
             return undefined;
@@ -156,10 +169,10 @@ export class GdScriptClassResolver {
         }
         const relative = path.relative(root, target);
         if (
-            relative === ''
-            || relative === '..'
-            || relative.startsWith(`..${path.sep}`)
-            || path.isAbsolute(relative)
+            relative === '' ||
+            relative === '..' ||
+            relative.startsWith(`..${path.sep}`) ||
+            path.isAbsolute(relative)
         ) {
             return undefined;
         }
@@ -194,7 +207,9 @@ export class GdScriptClassResolver {
         const files = await this.collectScripts();
         for (let start = 0; start < files.length; start += READ_CONCURRENCY) {
             const batch = files.slice(start, start + READ_CONCURRENCY);
-            const contents = await Promise.all(batch.map(async (file) => [file, await readText(file)] as const));
+            const contents = await Promise.all(
+                batch.map(async (file) => [file, await readText(file)] as const),
+            );
             for (const [file, content] of contents) {
                 const name = content ? CLASS_NAME.exec(content)?.[1] : undefined;
                 if (name) {
@@ -217,7 +232,11 @@ export class GdScriptClassResolver {
                 continue;
             }
             for (const entry of entries) {
-                if (entry.name === '.godot' || entry.name === '.git' || entry.name === 'node_modules') {
+                if (
+                    entry.name === '.godot' ||
+                    entry.name === '.git' ||
+                    entry.name === 'node_modules'
+                ) {
                     continue;
                 }
                 const full = path.join(dir, entry.name);

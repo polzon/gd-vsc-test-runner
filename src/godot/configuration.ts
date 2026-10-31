@@ -8,7 +8,9 @@ export const GODOT_EXECUTABLE_KEY = 'godotExecutable';
  * Returns undefined when empty/unset (meaning "resolve from PATH").
  */
 export function getConfiguredGodotPath(): string | undefined {
-    const value = vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>(GODOT_EXECUTABLE_KEY);
+    const value = vscode.workspace
+        .getConfiguration(CONFIG_SECTION)
+        .get<string>(GODOT_EXECUTABLE_KEY);
     if (!value || value.trim() === '') {
         return undefined;
     }

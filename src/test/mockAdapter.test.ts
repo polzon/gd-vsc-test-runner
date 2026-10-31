@@ -39,9 +39,12 @@ suite('mockAdapter', () => {
             excludeTests: [{ file: '/proj/test_1.gd', name: 'test_addition' }],
         });
         assert.deepStrictEqual(args, [
-            '--file', '/proj/test_1.gd',
-            '--file', '/proj/test_2.gd',
-            '--exclude', '/proj/test_1.gd:test_addition',
+            '--file',
+            '/proj/test_1.gd',
+            '--file',
+            '/proj/test_2.gd',
+            '--exclude',
+            '/proj/test_1.gd:test_addition',
         ]);
     });
 });

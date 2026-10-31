@@ -9,16 +9,12 @@ export interface ResolvedGodot {
 }
 
 export type GodotResolutionError =
-    | { code: 'not-found'; message: string }
-    | { code: 'version-failed'; message: string };
+    { code: 'not-found'; message: string } | { code: 'version-failed'; message: string };
 
 export type GodotResolutionResult =
-    | { ok: true; godot: ResolvedGodot }
-    | { ok: false; error: GodotResolutionError };
+    { ok: true; godot: ResolvedGodot } | { ok: false; error: GodotResolutionError };
 
-export type GodotProbeResult =
-    | { ok: true; version: string }
-    | { ok: false; message: string };
+export type GodotProbeResult = { ok: true; version: string } | { ok: false; message: string };
 
 /**
  * Runs `<executable> --version` and captures the version string.
@@ -32,7 +28,10 @@ function defaultProbe(executable: string): GodotProbeResult {
         return { ok: false, message: `Failed to execute '${executable}': ${result.error.message}` };
     }
     if (result.status !== 0) {
-        return { ok: false, message: `'${executable} --version' exited with code ${result.status}.` };
+        return {
+            ok: false,
+            message: `'${executable} --version' exited with code ${result.status}.`,
+        };
     }
     const version = (result.stdout ?? '').trim();
     if (version === '') {
@@ -68,7 +67,10 @@ export function resolveGodot(
         if (!isExecutableFile(explicit)) {
             return {
                 ok: false,
-                error: { code: 'not-found', message: `Configured Godot executable not found: ${explicit}` },
+                error: {
+                    code: 'not-found',
+                    message: `Configured Godot executable not found: ${explicit}`,
+                },
             };
         }
         const result = probe(explicit);
@@ -87,8 +89,14 @@ export function resolveGodot(
         }
         const result = probe(candidate);
         if (result.ok) {
-            return { ok: true, godot: { path: candidate, version: result.version, source: 'path' } };
+            return {
+                ok: true,
+                godot: { path: candidate, version: result.version, source: 'path' },
+            };
         }
     }
-    return { ok: false, error: { code: 'not-found', message: `Godot executable ('${name}') not found on PATH.` } };
+    return {
+        ok: false,
+        error: { code: 'not-found', message: `Godot executable ('${name}') not found on PATH.` },
+    };
 }
