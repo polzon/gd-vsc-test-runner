@@ -10,7 +10,7 @@ export interface GodotProject {
 }
 
 export type ItemData =
-    | { kind: 'folder'; project: GodotProject; dir: string }
+    | { kind: 'folder'; project: GodotProject }
     | { kind: 'file'; project: GodotProject; file: string }
     | { kind: 'test'; project: GodotProject; file: string; name: string };
 
@@ -337,7 +337,7 @@ export class TestTree implements vscode.Disposable {
             return existing;
         }
         const item = this.controller.createTestItem(id, path.basename(dir));
-        this.data.set(item, { kind: 'folder', project, dir });
+        this.data.set(item, { kind: 'folder', project });
         this.itemsById.set(id, item);
 
         const parentDir = path.dirname(dir);
@@ -359,8 +359,20 @@ export class TestTree implements vscode.Disposable {
         if (!item) {
             return;
         }
+        const parent = item.parent;
         this.removeFile(item);
-        this.pruneEmptyFolders(this.controller.items);
+        this.pruneEmptyFoldersUp(parent);
+    }
+
+    /** Delete folders left empty by a removal, walking up the ancestor chain. */
+    private pruneEmptyFoldersUp(start: vscode.TestItem | undefined): void {
+        let folder = start;
+        while (folder && this.data.get(folder)?.kind === 'folder' && folder.children.size === 0) {
+            const parent = folder.parent;
+            (parent?.children ?? this.controller.items).delete(folder.id);
+            this.itemsById.delete(folder.id);
+            folder = parent;
+        }
     }
 
     private pruneEmptyFolders(collection: vscode.TestItemCollection): void {
@@ -385,7 +397,9 @@ export class TestTree implements vscode.Disposable {
     ): void {
         collection.forEach((item) => {
             visit(item);
-            this.walk(item.children, visit);
+            if (this.data.get(item)?.kind === 'folder') {
+                this.walk(item.children, visit);
+            }
         });
     }
 
@@ -400,7 +414,10 @@ function folderId(project: GodotProject, dir: string): string {
 
 function isWithin(root: string, dir: string): boolean {
     const relative = path.relative(root, dir);
-    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+    return (
+        relative === '' ||
+        (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative))
+    );
 }
 
 function testId(fileItem: vscode.TestItem, name: string): string {
