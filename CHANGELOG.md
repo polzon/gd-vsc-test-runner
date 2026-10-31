@@ -14,3 +14,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Test Explorer integration: project and file discovery, lazy per-file parsing, file watching and live re-parsing
   of open editors.
 - Run profile for whole projects, files and single tests, with cancellation, failure messages and locations.
+
+### Fixed
+
+- Parameterized GdUnit4 tests show a parent test with one child per parameter set instead of a "reported no result"
+  failure. Skipped tests report as passes.

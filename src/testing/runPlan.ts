@@ -41,7 +41,27 @@ export function buildRunPlan(
             !exclude.some((s) => matches(s, t)),
     );
     const includeFiles = [...new Set(tests.map((t) => t.file))];
-    const selected = new Set(tests);
-    const excludeTests = known.filter((t) => includeFiles.includes(t.file) && !selected.has(t));
+    const selectedGroups = new Set(tests.map(groupKey));
+    const excludedGroups = new Set<string>();
+    const excludeTests: TestRef[] = [];
+    for (const test of known) {
+        if (!includeFiles.includes(test.file)) {
+            continue;
+        }
+        const group = groupKey(test);
+        if (selectedGroups.has(group) || excludedGroups.has(group)) {
+            continue;
+        }
+        excludedGroups.add(group);
+        excludeTests.push({ file: test.file, name: test.runName ?? test.name });
+    }
     return { includeFiles, excludeTests, tests };
+}
+
+/**
+ * Parameter sets of one function share a group, so the framework can only be
+ * asked to ignore the whole function, never one case of it.
+ */
+function groupKey(test: TestRef): string {
+    return `${test.file}::${test.runName ?? test.name}`;
 }

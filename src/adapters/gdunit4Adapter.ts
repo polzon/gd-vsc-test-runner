@@ -46,6 +46,225 @@ async function extendsTestSuite(content: string, context?: DiscoveryContext): Pr
     return lineage.some(isSuiteTarget);
 }
 
+/** Index of the bracket that closes the one at `openIndex`, respecting strings and comments. */
+function closingBracket(text: string, openIndex: number): number {
+    const open = text[openIndex];
+    const close = open === '(' ? ')' : open === '[' ? ']' : '}';
+    let depth = 0;
+    let quote: string | undefined;
+    let escaped = false;
+    for (let i = openIndex; i < text.length; i++) {
+        const ch = text[i];
+        if (quote) {
+            if (escaped) {
+                escaped = false;
+            } else if (ch === '\\') {
+                escaped = true;
+            } else if (ch === quote) {
+                quote = undefined;
+            }
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            continue;
+        }
+        if (ch === '#') {
+            const newline = text.indexOf('\n', i);
+            if (newline === -1) {
+                return -1;
+            }
+            i = newline;
+            continue;
+        }
+        if (ch === open) {
+            depth++;
+        } else if (ch === close && --depth === 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/** Split on `separator` where it is not inside brackets, braces or a string. */
+function splitTopLevel(text: string, separator: string): string[] {
+    const parts: string[] = [];
+    let depth = 0;
+    let quote: string | undefined;
+    let escaped = false;
+    let start = 0;
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (quote) {
+            if (escaped) {
+                escaped = false;
+            } else if (ch === '\\') {
+                escaped = true;
+            } else if (ch === quote) {
+                quote = undefined;
+            }
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            continue;
+        }
+        if (ch === '#') {
+            const newline = text.indexOf('\n', i);
+            if (newline === -1) {
+                break;
+            }
+            i = newline;
+            continue;
+        }
+        if (ch === '(' || ch === '[' || ch === '{') {
+            depth++;
+        } else if (ch === ')' || ch === ']' || ch === '}') {
+            depth--;
+        } else if (ch === separator && depth === 0) {
+            parts.push(text.slice(start, i));
+            start = i + 1;
+        }
+    }
+    parts.push(text.slice(start));
+    return parts;
+}
+
+/** Index just past the `:=` or `=` that introduces a parameter's default value. */
+function defaultStart(arg: string): number {
+    let depth = 0;
+    let quote: string | undefined;
+    let escaped = false;
+    for (let i = 0; i < arg.length; i++) {
+        const ch = arg[i];
+        if (quote) {
+            if (escaped) {
+                escaped = false;
+            } else if (ch === '\\') {
+                escaped = true;
+            } else if (ch === quote) {
+                quote = undefined;
+            }
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            continue;
+        }
+        if (ch === '(' || ch === '[' || ch === '{') {
+            depth++;
+        } else if (ch === ')' || ch === ']' || ch === '}') {
+            depth--;
+        } else if (depth === 0 && ch === ':' && arg[i + 1] === '=') {
+            return i + 2;
+        } else if (depth === 0 && ch === '=') {
+            return i + 1;
+        }
+    }
+    return -1;
+}
+
+/** Top-level elements of an array literal, or undefined when the value is not a literal. */
+function arrayElements(expression: string): string[] | undefined {
+    const text = expression.trim();
+    if (!text.startsWith('[')) {
+        return undefined;
+    }
+    const close = closingBracket(text, 0);
+    if (close === -1) {
+        return undefined;
+    }
+    const inner = text.slice(1, close);
+    if (inner.trim() === '') {
+        return [];
+    }
+    return splitTopLevel(inner, ',')
+        .map((element) => element.trim())
+        .filter((element) => element !== '');
+}
+
+/**
+ * Rebuild the text GdUnit4 prints for a parameter set: outer brackets and quotes
+ * normalized, with one space after commas as its parameter parser writes them.
+ */
+function parameterCaseText(element: string): string {
+    let text = element.replace(/\r?\n/g, '').trim();
+    if (text.startsWith('[')) {
+        const close = closingBracket(text, 0);
+        if (close === text.length - 1) {
+            text = text.slice(1, -1);
+        }
+    }
+    text = text.replace(/"/g, "'");
+    return normalizeCommas(text);
+}
+
+function normalizeCommas(text: string): string {
+    let out = '';
+    let quote: string | undefined;
+    let escaped = false;
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (quote) {
+            out += ch;
+            if (escaped) {
+                escaped = false;
+            } else if (ch === '\\') {
+                escaped = true;
+            } else if (ch === quote) {
+                quote = undefined;
+            }
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            out += ch;
+            continue;
+        }
+        if (ch !== ',') {
+            out += ch;
+            continue;
+        }
+        out += ch;
+        let next = i + 1;
+        while (next < text.length && /\s/.test(text[next])) {
+            next++;
+        }
+        if (next < text.length && text[next] !== ']' && text[next] !== ')') {
+            out += ' ';
+        }
+        i = next - 1;
+    }
+    return out.trim();
+}
+
+/** Parameter sets from an inline `_test_parameters` default value. */
+function inlineParameterSets(lines: string[], startLine: number): string[] | undefined {
+    const rest = lines.slice(startLine).join('\n');
+    const declaration = TEST_FUNC.exec(lines[startLine]);
+    if (!declaration) {
+        return undefined;
+    }
+    const open = declaration[0].length - 1;
+    const close = closingBracket(rest, open);
+    if (close === -1) {
+        return undefined;
+    }
+    for (const arg of splitTopLevel(rest.slice(open + 1, close), ',')) {
+        const name = /^\s*([A-Za-z_]\w*)/.exec(arg)?.[1];
+        if (name !== 'test_parameters' && name !== '_test_parameters') {
+            continue;
+        }
+        const start = defaultStart(arg);
+        if (start === -1) {
+            return undefined;
+        }
+        const elements = arrayElements(arg.slice(start));
+        return elements?.map(parameterCaseText);
+    }
+    return undefined;
+}
+
 async function parseTestCases(
     content: string,
     context?: DiscoveryContext,
@@ -61,15 +280,26 @@ async function parseTestCases(
             return;
         }
         const endLine = lastBodyLine(lines, index);
-        cases.push({
-            name: match[1],
-            range: {
-                startLine: index,
-                startCharacter: 0,
-                endLine,
-                endCharacter: lines[endLine].length,
-            },
-        });
+        const range = {
+            startLine: index,
+            startCharacter: 0,
+            endLine,
+            endCharacter: lines[endLine].length,
+        };
+        const parameters = inlineParameterSets(lines, index);
+        if (parameters && parameters.length > 0) {
+            parameters.forEach((parameter, parameterIndex) => {
+                cases.push({
+                    name: `${match[1]}:${parameterIndex} (${parameter})`,
+                    label: parameter,
+                    parentName: match[1],
+                    runName: match[1],
+                    range,
+                });
+            });
+            return;
+        }
+        cases.push({ name: match[1], range });
     });
     return cases;
 }
@@ -140,12 +370,13 @@ function buildRunArgs(request: RunRequestInfo): string[] {
         '-s',
         '-d',
         '--remote-debug',
-        'tcp://127.0.0.1:0',
-        CMD_TOOL,
-        '-c',
-        '-rd',
-        REPORT_DIR,
+        request.debuggerUri ?? 'tcp://127.0.0.1:0',
     ];
+    if (request.debuggerUri) {
+        // Runtime script errors must not pause a coverage run.
+        args.push('--ignore-error-breaks');
+    }
+    args.push(CMD_TOOL, '-c', '-rd', REPORT_DIR);
     if (request.includeFiles.length === 0) {
         // Everything except the addons themselves (gdUnit4 ships its own test suites).
         args.push('-a', 'res://', '-i', 'res://addons');

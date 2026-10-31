@@ -12,7 +12,20 @@ export interface GodotProject {
 export type ItemData =
     | { kind: 'folder'; project: GodotProject }
     | { kind: 'file'; project: GodotProject; file: string }
-    | { kind: 'test'; project: GodotProject; file: string; name: string };
+    | {
+          kind: 'test';
+          project: GodotProject;
+          file: string;
+          name: string;
+          runName?: string;
+      }
+    | {
+          kind: 'testGroup';
+          project: GodotProject;
+          file: string;
+          name: string;
+          runName: string;
+      };
 
 /** Directories that never hold the project's own tests (addons ship their own suites). */
 const IGNORED_DIRS = ['addons', '.godot'];
@@ -90,9 +103,19 @@ export class TestTree implements vscode.Disposable {
         if (data?.kind === 'file') {
             return [item];
         }
-        if (data?.kind === 'test') {
-            const parent = item.parent;
-            return parent && this.data.get(parent)?.kind === 'file' ? [parent] : [];
+        if (data?.kind === 'test' || data?.kind === 'testGroup') {
+            let parent = item.parent;
+            while (parent) {
+                const parentData = this.data.get(parent);
+                if (parentData?.kind === 'file') {
+                    return [parent];
+                }
+                if (!parentData) {
+                    return [];
+                }
+                parent = parent.parent;
+            }
+            return [];
         }
         if (data?.kind !== 'folder') {
             return [];
@@ -108,7 +131,22 @@ export class TestTree implements vscode.Disposable {
 
     findTest(file: string, name: string): vscode.TestItem | undefined {
         const fileItem = this.itemsById.get(vscode.Uri.file(file).toString());
-        return fileItem?.children.get(testId(fileItem, name));
+        if (!fileItem) {
+            return undefined;
+        }
+        let found: vscode.TestItem | undefined;
+        const visit = (collection: vscode.TestItemCollection): void => {
+            collection.forEach((item) => {
+                const data = this.data.get(item);
+                if (data?.kind === 'test' && data.name === name) {
+                    found = item;
+                } else if (item.children.size > 0) {
+                    visit(item.children);
+                }
+            });
+        };
+        visit(fileItem.children);
+        return found;
     }
 
     /** Discover projects and test files once; later calls wait for that first discovery. */
@@ -166,23 +204,47 @@ export class TestTree implements vscode.Disposable {
                 projectRoot: data.project.root,
                 file: data.file,
             });
-            item.children.replace(
-                cases.map((c) => {
-                    const child = this.controller.createTestItem(
-                        testId(item, c.name),
-                        c.name,
+            const children: vscode.TestItem[] = [];
+            const groups = new Map<string, vscode.TestItem>();
+            for (const c of cases) {
+                const child = this.controller.createTestItem(
+                    testId(item, c.name),
+                    c.label ?? c.name,
+                    item.uri,
+                );
+                child.range = toRange(c.range);
+                this.data.set(child, {
+                    kind: 'test',
+                    project: data.project,
+                    file: data.file,
+                    name: c.name,
+                    runName: c.runName,
+                });
+                if (!c.parentName) {
+                    children.push(child);
+                    continue;
+                }
+                let parent = groups.get(c.parentName);
+                if (!parent) {
+                    parent = this.controller.createTestItem(
+                        testId(item, c.parentName),
+                        c.parentName,
                         item.uri,
                     );
-                    child.range = toRange(c.range);
-                    this.data.set(child, {
-                        kind: 'test',
+                    parent.range = toRange(c.range);
+                    this.data.set(parent, {
+                        kind: 'testGroup',
                         project: data.project,
                         file: data.file,
-                        name: c.name,
+                        name: c.parentName,
+                        runName: c.runName ?? c.parentName,
                     });
-                    return child;
-                }),
-            );
+                    groups.set(c.parentName, parent);
+                    children.push(parent);
+                }
+                parent.children.add(child);
+            }
+            item.children.replace(children);
             item.error = undefined;
         } catch (err) {
             const detail = err instanceof Error ? err.message : String(err);

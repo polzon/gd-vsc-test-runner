@@ -15,12 +15,23 @@ export interface SourceRange {
 export interface TestCaseDescriptor {
     name: string;
     range: SourceRange;
+    /** Text shown in the tree when it differs from `name`, e.g. a parameter set. */
+    label?: string;
+    /** Parent test case of this parameter set, e.g. the parameterized function. */
+    parentName?: string;
+    /**
+     * The function shared by every case of a parameterized test. Set only for
+     * individual parameter sets; the framework filters by this name.
+     */
+    runName?: string;
 }
 
 /** Identifies one test case: the absolute path of its file plus its name. */
 export interface TestRef {
     file: string;
     name: string;
+    /** See [[TestCaseDescriptor.runName]]. */
+    runName?: string;
 }
 
 /** Outcome of a single test after a run. */
@@ -53,6 +64,8 @@ export interface RunRequestInfo {
     includeFiles: string[];
     /** Tests to exclude from the included files. */
     excludeTests: TestRef[];
+    /** Where Godot should connect for a remote debug session, e.g. `tcp://127.0.0.1:1234`. */
+    debuggerUri?: string;
 }
 
 /** The project file being parsed, for adapters that need to resolve references across files. */

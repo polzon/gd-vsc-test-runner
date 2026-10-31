@@ -7,10 +7,27 @@ import {
 } from '../godot/configuration';
 import { resolveGodot } from '../godot/godotResolver';
 import { runGodot } from '../godot/runGodot';
+import { DebuggerServer } from '../godot/debuggerServer';
+import { toResPath } from '../godot/resPath';
+import { addCoverage, FileCoverageInput } from '../coverage/coverageStore';
+import { executableLines } from '../coverage/executableLines';
+import { collectLineHits } from '../coverage/lineCollector';
 import { buildRunPlan, Selection } from './runPlan';
 import { GodotProject, TestTree } from './testTree';
 
 type Log = (message: string) => void;
+
+/** What a coverage run needs to keep alive between spawning Godot and publishing results. */
+interface CoverageSession {
+    server: DebuggerServer;
+    port: number;
+    files: { resPath: string; uri: vscode.Uri; source: string; executable: number[] }[];
+    collecting: Promise<Map<string, Set<number>>>;
+}
+
+export interface RunOptions {
+    coverage?: boolean;
+}
 
 /** Terminal output in the Test Results view needs CRLF line endings. */
 function toTerminal(text: string): string {
@@ -25,6 +42,31 @@ function testKey(file: string, name: string): string {
     return `${vscode.Uri.file(file).toString()}::${name}`;
 }
 
+/** `test_func:1 (2, "two")` split into its function name and parameter-set index. */
+function parameterCase(name: string): { base: string; index: string } | undefined {
+    const match = /^(.*?):(\d+) \(/.exec(name);
+    return match ? { base: match[1], index: match[2] } : undefined;
+}
+
+function caseKey(file: string, base: string, index: string): string {
+    return `${testKey(file, base)}::${index}`;
+}
+
+/** One result for a test item, combining the cases of a parameterized test. */
+function combinedResult(results: TestResult[]): TestResult {
+    const chosen =
+        results.find((r) => r.status === 'failed') ??
+        results.find((r) => r.status === 'passed') ??
+        results[0];
+    const durations = results
+        .map((r) => r.duration)
+        .filter((duration): duration is number => duration !== undefined);
+    if (durations.length === 0) {
+        return chosen;
+    }
+    return { ...chosen, duration: durations.reduce((total, duration) => total + duration, 0) };
+}
+
 /**
  * The Test Run Orchestrator: turns a TestRunRequest into one framework invocation per Godot
  * project and publishes the parsed results into the TestRun.
@@ -36,10 +78,14 @@ export class RunOrchestrator {
         private readonly log: Log,
     ) {}
 
-    async run(request: vscode.TestRunRequest, token: vscode.CancellationToken): Promise<void> {
+    async run(
+        request: vscode.TestRunRequest,
+        token: vscode.CancellationToken,
+        options: RunOptions = {},
+    ): Promise<void> {
         const run = this.controller.createTestRun(request);
         try {
-            await this.execute(request, run, token);
+            await this.execute(request, run, token, options);
         } finally {
             run.end();
         }
@@ -49,6 +95,7 @@ export class RunOrchestrator {
         request: vscode.TestRunRequest,
         run: vscode.TestRun,
         token: vscode.CancellationToken,
+        options: RunOptions,
     ) {
         const include = request.include ? [...request.include] : undefined;
         await this.tree.ensureResolved(this.fileItemsOf(include));
@@ -70,7 +117,15 @@ export class RunOrchestrator {
             if (projectInclude?.length === 0) {
                 continue;
             }
-            await this.runProject(project, projectInclude, exclude, godot.godot.path, run, token);
+            await this.runProject(
+                project,
+                projectInclude,
+                exclude,
+                godot.godot.path,
+                run,
+                token,
+                options.coverage === true,
+            );
         }
     }
 
@@ -81,92 +136,246 @@ export class RunOrchestrator {
         executable: string,
         run: vscode.TestRun,
         token: vscode.CancellationToken,
+        coverage: boolean,
     ): Promise<void> {
-        const known = this.tree.fileItems(project).flatMap((fileItem) => {
-            const tests: { file: string; name: string }[] = [];
-            fileItem.children.forEach((child) => {
-                const data = this.tree.getData(child);
-                if (data?.kind === 'test') {
-                    tests.push({ file: data.file, name: data.name });
-                }
-            });
-            return tests;
-        });
+        const known: { file: string; name: string; runName?: string }[] = [];
+        for (const fileItem of this.tree.fileItems(project)) {
+            const visit = (collection: vscode.TestItemCollection): void => {
+                collection.forEach((child) => {
+                    const data = this.tree.getData(child);
+                    if (data?.kind === 'test') {
+                        known.push({ file: data.file, name: data.name, runName: data.runName });
+                    } else if (child.children.size > 0) {
+                        visit(child.children);
+                    }
+                });
+            };
+            visit(fileItem.children);
+        }
         const plan = buildRunPlan(known, include, exclude);
         if (plan.tests.length === 0) {
             return;
         }
 
         // Captured up front: results must go to these items even if the tree is re-parsed mid-run.
-        const byKey = new Map(
-            plan.tests.flatMap((t) => {
-                const item = this.tree.findTest(t.file, t.name);
-                return item ? [[testKey(t.file, t.name), item] as const] : [];
-            }),
-        );
+        const byKey = new Map<string, vscode.TestItem>();
+        const byCase = new Map<string, vscode.TestItem>();
+        const byBase = new Map<string, vscode.TestItem>();
+        for (const test of plan.tests) {
+            const item = this.tree.findTest(test.file, test.name);
+            if (!item) {
+                continue;
+            }
+            byKey.set(testKey(test.file, test.name), item);
+            const parsed = parameterCase(test.name);
+            if (parsed) {
+                byCase.set(caseKey(test.file, parsed.base, parsed.index), item);
+            } else {
+                byBase.set(testKey(test.file, test.runName ?? test.name), item);
+            }
+        }
         const items = [...byKey.values()];
         items.forEach((item) => run.started(item));
 
-        let args: string[];
-        try {
-            args = project.adapter.buildRunArgs({
-                projectRoot: project.root,
-                includeFiles: plan.includeFiles,
-                excludeTests: plan.excludeTests,
+        let session: CoverageSession | undefined;
+        if (coverage) {
+            try {
+                session = await this.prepareCoverage(project);
+            } catch (error) {
+                const detail = error instanceof Error ? error.message : String(error);
+                this.log(`Coverage unavailable: ${detail}`);
+            }
+        }
+        let processExiting = false;
+        let disconnectedEarly = false;
+        if (session) {
+            session.server.onClose(() => {
+                if (!processExiting) {
+                    disconnectedEarly = true;
+                }
             });
-        } catch (err) {
-            const message = new vscode.TestMessage(
-                err instanceof Error ? err.message : String(err),
-            );
-            items.forEach((item) => run.errored(item, message));
-            return;
         }
 
-        const commandLine = `${executable} ${args.join(' ')}`;
-        this.log(`Running: ${commandLine}`);
-        run.appendOutput(toTerminal(`> ${commandLine}\n`));
-
-        const abort = new AbortController();
-        const cancellation = token.onCancellationRequested(() => abort.abort());
-        const result = await runGodot(executable, args, {
-            cwd: project.root,
-            signal: abort.signal,
-            onOutput: (chunk) => run.appendOutput(toTerminal(chunk)),
-        });
-        cancellation.dispose();
-
-        if (result.spawnError) {
-            const message = new vscode.TestMessage(
-                `Failed to start Godot: ${result.spawnError.message}`,
-            );
-            items.forEach((item) => run.errored(item, message));
-            return;
-        }
-        this.log(`${project.adapter.displayName} exited with code ${result.exitCode ?? 'n/a'}`);
-
-        const reported = new Set<vscode.TestItem>();
-        for (const testResult of project.adapter.parseResults(result.stdout, project.root)) {
-            const item = testResult.file && byKey.get(testKey(testResult.file, testResult.name));
-            if (item) {
-                this.publish(run, item, testResult);
-                reported.add(item);
-            }
-        }
-
-        for (const item of items.filter((i) => !reported.has(i))) {
-            if (token.isCancellationRequested) {
-                run.skipped(item);
-            } else {
-                run.errored(
-                    item,
-                    new vscode.TestMessage(
-                        `${project.adapter.displayName} reported no result for this test ` +
-                            `(exit code ${result.exitCode ?? 'n/a'}). See the test output ` +
-                            'for details.',
-                    ),
+        try {
+            let args: string[];
+            try {
+                args = project.adapter.buildRunArgs({
+                    projectRoot: project.root,
+                    includeFiles: plan.includeFiles,
+                    excludeTests: plan.excludeTests,
+                    debuggerUri: session ? `tcp://127.0.0.1:${session.port}` : undefined,
+                });
+            } catch (err) {
+                const message = new vscode.TestMessage(
+                    err instanceof Error ? err.message : String(err),
                 );
+                items.forEach((item) => run.errored(item, message));
+                return;
+            }
+
+            const commandLine = `${executable} ${args.join(' ')}`;
+            this.log(`Running: ${commandLine}`);
+            run.appendOutput(toTerminal(`> ${commandLine}\n`));
+
+            const abort = new AbortController();
+            const cancellation = token.onCancellationRequested(() => abort.abort());
+            const result = await runGodot(executable, args, {
+                cwd: project.root,
+                signal: abort.signal,
+                onOutput: (chunk) => run.appendOutput(toTerminal(chunk)),
+                onExit: () => {
+                    processExiting = true;
+                },
+            });
+            cancellation.dispose();
+            processExiting = true;
+
+            let coverageHits: Map<string, Set<number>> | undefined;
+            if (session) {
+                session.server.close();
+                coverageHits = await session.collecting;
+            }
+
+            if (result.spawnError) {
+                const message = new vscode.TestMessage(
+                    `Failed to start Godot: ${result.spawnError.message}`,
+                );
+                items.forEach((item) => run.errored(item, message));
+                return;
+            }
+            this.log(`${project.adapter.displayName} exited with code ${result.exitCode ?? 'n/a'}`);
+
+            const found = new Map<vscode.TestItem, TestResult[]>();
+            for (const testResult of project.adapter.parseResults(result.stdout, project.root)) {
+                const file = testResult.file;
+                if (!file) {
+                    continue;
+                }
+                const parsed = parameterCase(testResult.name);
+                const item =
+                    byKey.get(testKey(file, testResult.name)) ??
+                    (parsed ? byCase.get(caseKey(file, parsed.base, parsed.index)) : undefined) ??
+                    byBase.get(testKey(file, parsed?.base ?? testResult.name));
+                if (item) {
+                    found.set(item, [...(found.get(item) ?? []), testResult]);
+                }
+            }
+
+            const reported = new Set(found.keys());
+            for (const [item, results] of found) {
+                this.publish(run, item, combinedResult(results));
+            }
+
+            for (const item of items.filter((i) => !reported.has(i))) {
+                if (token.isCancellationRequested) {
+                    run.skipped(item);
+                } else {
+                    run.errored(
+                        item,
+                        new vscode.TestMessage(
+                            `${project.adapter.displayName} reported no result for this test ` +
+                                `(exit code ${result.exitCode ?? 'n/a'}). See the test output ` +
+                                'for details.',
+                        ),
+                    );
+                }
+            }
+
+            if (session && coverageHits) {
+                this.publishCoverage(session, coverageHits, disconnectedEarly, run);
+            }
+        } finally {
+            session?.server.close();
+        }
+    }
+
+    /** Discover project scripts, start the debugger server, and begin collecting hits. */
+    private async prepareCoverage(project: GodotProject): Promise<CoverageSession | undefined> {
+        const files = await this.coverageFiles(project);
+        if (files.length === 0) {
+            this.log('No project scripts to cover.');
+            return undefined;
+        }
+        const server = new DebuggerServer(this.log);
+        let port: number;
+        try {
+            port = await server.listen();
+        } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error);
+            this.log(`Cannot listen for the Godot debugger: ${detail}`);
+            return undefined;
+        }
+        const targets = new Map<string, number[]>(
+            files.map((file) => [file.resPath, file.executable]),
+        );
+        this.log(`Collecting coverage for ${files.length} scripts.`);
+        return { server, port, files, collecting: collectLineHits(server, targets) };
+    }
+
+    /**
+     * Every `.gd` under the project, except addons, Godot's cache and the framework's test files.
+     * Reads from disk, which is what Godot compiles and runs.
+     */
+    private async coverageFiles(project: GodotProject): Promise<CoverageSession['files']> {
+        const exclude = new vscode.RelativePattern(project.root, '**/{addons,.godot}/**');
+        const testUris = new Set(
+            (
+                await vscode.workspace.findFiles(
+                    new vscode.RelativePattern(project.root, project.adapter.discovery.fileFilter),
+                    exclude,
+                )
+            ).map((uri) => uri.toString()),
+        );
+        const uris = (
+            await vscode.workspace.findFiles(
+                new vscode.RelativePattern(project.root, '**/*.gd'),
+                exclude,
+            )
+        ).filter((uri) => !testUris.has(uri.toString()));
+
+        const files: CoverageSession['files'] = [];
+        for (const uri of uris) {
+            const resPath = toResPath(project.root, uri.fsPath);
+            if (!resPath) {
+                continue;
+            }
+            let source: string;
+            try {
+                source = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(uri));
+            } catch (error) {
+                const detail = error instanceof Error ? error.message : String(error);
+                this.log(`Skipping ${uri.fsPath} for coverage: ${detail}`);
+                continue;
+            }
+            const executable = executableLines(source);
+            if (executable.length > 0) {
+                files.push({ resPath, uri, source, executable });
             }
         }
+        return files;
+    }
+
+    private publishCoverage(
+        session: CoverageSession,
+        hits: Map<string, Set<number>>,
+        disconnectedEarly: boolean,
+        run: vscode.TestRun,
+    ): void {
+        if (!session.server.hasConnected) {
+            this.log('Debugger did not connect; no coverage.');
+            return;
+        }
+        if (disconnectedEarly) {
+            this.log('Debugger disconnected mid-run; coverage is partial.');
+        }
+        const inputs: FileCoverageInput[] = session.files.map((file) => ({
+            uri: file.uri,
+            source: file.source,
+            executable: file.executable,
+            hits: hits.get(file.resPath) ?? new Set<number>(),
+        }));
+        addCoverage(run, inputs);
+        this.log(`Published coverage for ${inputs.length} scripts.`);
     }
 
     private publish(run: vscode.TestRun, item: vscode.TestItem, result: TestResult): void {
@@ -175,7 +384,7 @@ export class RunOrchestrator {
                 run.passed(item, result.duration);
                 break;
             case 'skipped':
-                run.skipped(item);
+                run.passed(item, result.duration);
                 break;
             case 'failed': {
                 const message = new vscode.TestMessage(result.message ?? 'Test failed.');
@@ -200,8 +409,17 @@ export class RunOrchestrator {
     ): void {
         this.log(`Cannot run tests: ${reason}`);
         const message = new vscode.TestMessage(`Cannot run tests: ${reason}`);
+        const report = (collection: vscode.TestItemCollection): void => {
+            collection.forEach((child) => {
+                if (child.children.size > 0) {
+                    report(child.children);
+                } else {
+                    run.errored(child, message);
+                }
+            });
+        };
         for (const fileItem of this.fileItemsOf(include)) {
-            fileItem.children.forEach((child) => run.errored(child, message));
+            report(fileItem.children);
         }
         const openSettings = 'Open Settings';
         void vscode.window
@@ -236,6 +454,16 @@ export class RunOrchestrator {
             }
             if (data.kind === 'test') {
                 return [{ file: data.file, test: data.name }];
+            }
+            if (data.kind === 'testGroup') {
+                const selections: Selection[] = [];
+                item.children.forEach((child) => {
+                    const childData = this.tree.getData(child);
+                    if (childData?.kind === 'test') {
+                        selections.push({ file: childData.file, test: childData.name });
+                    }
+                });
+                return selections;
             }
             if (data.kind === 'file') {
                 return [{ file: data.file }];
