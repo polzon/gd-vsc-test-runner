@@ -23,5 +23,6 @@ export default [{
         eqeqeq: "warn",
         "no-throw-literal": "warn",
         semi: "warn",
+        "max-len": ["warn", { code: 100, ignoreUrls: true, ignoreStrings: true }],
     },
 }];
