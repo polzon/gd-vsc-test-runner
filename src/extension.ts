@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { getDetailedCoverage } from './coverage/coverageStore';
 import { getConfiguredGodotPath } from './godot/configuration';
 import { resolveGodot } from './godot/godotResolver';
 import { RunOrchestrator } from './testing/runOrchestrator';
@@ -35,6 +36,13 @@ export async function activate(
         (request, token) => orchestrator.run(request, token),
         true,
     );
+    const coverageProfile = controller.createRunProfile(
+        'Run with Coverage',
+        vscode.TestRunProfileKind.Coverage,
+        (request, token) => orchestrator.run(request, token, { coverage: true }),
+    );
+    coverageProfile.loadDetailedCoverage = (_run, fileCoverage) =>
+        Promise.resolve(getDetailedCoverage(fileCoverage));
 
     context.subscriptions.push(output, controller, tree);
     void tree.discover();

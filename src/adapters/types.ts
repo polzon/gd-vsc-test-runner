@@ -53,6 +53,8 @@ export interface RunRequestInfo {
     includeFiles: string[];
     /** Tests to exclude from the included files. */
     excludeTests: TestRef[];
+    /** Where Godot should connect for a remote debug session, e.g. `tcp://127.0.0.1:1234`. */
+    debuggerUri?: string;
 }
 
 /** The project file being parsed, for adapters that need to resolve references across files. */

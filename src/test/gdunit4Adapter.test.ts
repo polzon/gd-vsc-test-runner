@@ -148,6 +148,25 @@ suite('GdUnit4 Adapter', () => {
         ]);
     });
 
+    test('buildRunArgs uses the coverage debugger URI and ignores error breaks', () => {
+        const args = gdunit4Adapter.buildRunArgs({
+            projectRoot: PROJECT_ROOT,
+            includeFiles: [],
+            excludeTests: [],
+            debuggerUri: 'tcp://127.0.0.1:4321',
+        });
+        assert.deepStrictEqual(args.slice(0, 8), [
+            '--path',
+            PROJECT_ROOT,
+            '-s',
+            '-d',
+            '--remote-debug',
+            'tcp://127.0.0.1:4321',
+            '--ignore-error-breaks',
+            'res://addons/gdUnit4/bin/GdUnitCmdTool.gd',
+        ]);
+    });
+
     test('buildRunArgs runs the whole project except addons when no files are given', () => {
         const args = gdunit4Adapter.buildRunArgs({
             projectRoot: PROJECT_ROOT,

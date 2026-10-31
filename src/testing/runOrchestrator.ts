@@ -7,10 +7,27 @@ import {
 } from '../godot/configuration';
 import { resolveGodot } from '../godot/godotResolver';
 import { runGodot } from '../godot/runGodot';
+import { DebuggerServer } from '../godot/debuggerServer';
+import { toResPath } from '../godot/resPath';
+import { addCoverage, FileCoverageInput } from '../coverage/coverageStore';
+import { executableLines } from '../coverage/executableLines';
+import { collectLineHits } from '../coverage/lineCollector';
 import { buildRunPlan, Selection } from './runPlan';
 import { GodotProject, TestTree } from './testTree';
 
 type Log = (message: string) => void;
+
+/** What a coverage run needs to keep alive between spawning Godot and publishing results. */
+interface CoverageSession {
+    server: DebuggerServer;
+    port: number;
+    files: { resPath: string; uri: vscode.Uri; source: string; executable: number[] }[];
+    collecting: Promise<Map<string, Set<number>>>;
+}
+
+export interface RunOptions {
+    coverage?: boolean;
+}
 
 /** Terminal output in the Test Results view needs CRLF line endings. */
 function toTerminal(text: string): string {
@@ -36,10 +53,14 @@ export class RunOrchestrator {
         private readonly log: Log,
     ) {}
 
-    async run(request: vscode.TestRunRequest, token: vscode.CancellationToken): Promise<void> {
+    async run(
+        request: vscode.TestRunRequest,
+        token: vscode.CancellationToken,
+        options: RunOptions = {},
+    ): Promise<void> {
         const run = this.controller.createTestRun(request);
         try {
-            await this.execute(request, run, token);
+            await this.execute(request, run, token, options);
         } finally {
             run.end();
         }
@@ -49,6 +70,7 @@ export class RunOrchestrator {
         request: vscode.TestRunRequest,
         run: vscode.TestRun,
         token: vscode.CancellationToken,
+        options: RunOptions,
     ) {
         const include = request.include ? [...request.include] : undefined;
         await this.tree.ensureResolved(this.fileItemsOf(include));
@@ -70,7 +92,15 @@ export class RunOrchestrator {
             if (projectInclude?.length === 0) {
                 continue;
             }
-            await this.runProject(project, projectInclude, exclude, godot.godot.path, run, token);
+            await this.runProject(
+                project,
+                projectInclude,
+                exclude,
+                godot.godot.path,
+                run,
+                token,
+                options.coverage === true,
+            );
         }
     }
 
@@ -81,6 +111,7 @@ export class RunOrchestrator {
         executable: string,
         run: vscode.TestRun,
         token: vscode.CancellationToken,
+        coverage: boolean,
     ): Promise<void> {
         const known = this.tree.fileItems(project).flatMap((fileItem) => {
             const tests: { file: string; name: string }[] = [];
@@ -107,66 +138,194 @@ export class RunOrchestrator {
         const items = [...byKey.values()];
         items.forEach((item) => run.started(item));
 
-        let args: string[];
-        try {
-            args = project.adapter.buildRunArgs({
-                projectRoot: project.root,
-                includeFiles: plan.includeFiles,
-                excludeTests: plan.excludeTests,
+        let session: CoverageSession | undefined;
+        if (coverage) {
+            try {
+                session = await this.prepareCoverage(project);
+            } catch (error) {
+                const detail = error instanceof Error ? error.message : String(error);
+                this.log(`Coverage unavailable: ${detail}`);
+            }
+        }
+        let processExiting = false;
+        let disconnectedEarly = false;
+        if (session) {
+            session.server.onClose(() => {
+                if (!processExiting) {
+                    disconnectedEarly = true;
+                }
             });
-        } catch (err) {
-            const message = new vscode.TestMessage(
-                err instanceof Error ? err.message : String(err),
-            );
-            items.forEach((item) => run.errored(item, message));
-            return;
         }
 
-        const commandLine = `${executable} ${args.join(' ')}`;
-        this.log(`Running: ${commandLine}`);
-        run.appendOutput(toTerminal(`> ${commandLine}\n`));
-
-        const abort = new AbortController();
-        const cancellation = token.onCancellationRequested(() => abort.abort());
-        const result = await runGodot(executable, args, {
-            cwd: project.root,
-            signal: abort.signal,
-            onOutput: (chunk) => run.appendOutput(toTerminal(chunk)),
-        });
-        cancellation.dispose();
-
-        if (result.spawnError) {
-            const message = new vscode.TestMessage(
-                `Failed to start Godot: ${result.spawnError.message}`,
-            );
-            items.forEach((item) => run.errored(item, message));
-            return;
-        }
-        this.log(`${project.adapter.displayName} exited with code ${result.exitCode ?? 'n/a'}`);
-
-        const reported = new Set<vscode.TestItem>();
-        for (const testResult of project.adapter.parseResults(result.stdout, project.root)) {
-            const item = testResult.file && byKey.get(testKey(testResult.file, testResult.name));
-            if (item) {
-                this.publish(run, item, testResult);
-                reported.add(item);
-            }
-        }
-
-        for (const item of items.filter((i) => !reported.has(i))) {
-            if (token.isCancellationRequested) {
-                run.skipped(item);
-            } else {
-                run.errored(
-                    item,
-                    new vscode.TestMessage(
-                        `${project.adapter.displayName} reported no result for this test ` +
-                            `(exit code ${result.exitCode ?? 'n/a'}). See the test output ` +
-                            'for details.',
-                    ),
+        try {
+            let args: string[];
+            try {
+                args = project.adapter.buildRunArgs({
+                    projectRoot: project.root,
+                    includeFiles: plan.includeFiles,
+                    excludeTests: plan.excludeTests,
+                    debuggerUri: session ? `tcp://127.0.0.1:${session.port}` : undefined,
+                });
+            } catch (err) {
+                const message = new vscode.TestMessage(
+                    err instanceof Error ? err.message : String(err),
                 );
+                items.forEach((item) => run.errored(item, message));
+                return;
+            }
+
+            const commandLine = `${executable} ${args.join(' ')}`;
+            this.log(`Running: ${commandLine}`);
+            run.appendOutput(toTerminal(`> ${commandLine}\n`));
+
+            const abort = new AbortController();
+            const cancellation = token.onCancellationRequested(() => abort.abort());
+            const result = await runGodot(executable, args, {
+                cwd: project.root,
+                signal: abort.signal,
+                onOutput: (chunk) => run.appendOutput(toTerminal(chunk)),
+                onExit: () => {
+                    processExiting = true;
+                },
+            });
+            cancellation.dispose();
+            processExiting = true;
+
+            let coverageHits: Map<string, Set<number>> | undefined;
+            if (session) {
+                session.server.close();
+                coverageHits = await session.collecting;
+            }
+
+            if (result.spawnError) {
+                const message = new vscode.TestMessage(
+                    `Failed to start Godot: ${result.spawnError.message}`,
+                );
+                items.forEach((item) => run.errored(item, message));
+                return;
+            }
+            this.log(`${project.adapter.displayName} exited with code ${result.exitCode ?? 'n/a'}`);
+
+            const reported = new Set<vscode.TestItem>();
+            for (const testResult of project.adapter.parseResults(result.stdout, project.root)) {
+                const item =
+                    testResult.file && byKey.get(testKey(testResult.file, testResult.name));
+                if (item) {
+                    this.publish(run, item, testResult);
+                    reported.add(item);
+                }
+            }
+
+            for (const item of items.filter((i) => !reported.has(i))) {
+                if (token.isCancellationRequested) {
+                    run.skipped(item);
+                } else {
+                    run.errored(
+                        item,
+                        new vscode.TestMessage(
+                            `${project.adapter.displayName} reported no result for this test ` +
+                                `(exit code ${result.exitCode ?? 'n/a'}). See the test output ` +
+                                'for details.',
+                        ),
+                    );
+                }
+            }
+
+            if (session && coverageHits) {
+                this.publishCoverage(session, coverageHits, disconnectedEarly, run);
+            }
+        } finally {
+            session?.server.close();
+        }
+    }
+
+    /** Discover project scripts, start the debugger server, and begin collecting hits. */
+    private async prepareCoverage(project: GodotProject): Promise<CoverageSession | undefined> {
+        const files = await this.coverageFiles(project);
+        if (files.length === 0) {
+            this.log('No project scripts to cover.');
+            return undefined;
+        }
+        const server = new DebuggerServer(this.log);
+        let port: number;
+        try {
+            port = await server.listen();
+        } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error);
+            this.log(`Cannot listen for the Godot debugger: ${detail}`);
+            return undefined;
+        }
+        const targets = new Map<string, number[]>(
+            files.map((file) => [file.resPath, file.executable]),
+        );
+        this.log(`Collecting coverage for ${files.length} scripts.`);
+        return { server, port, files, collecting: collectLineHits(server, targets) };
+    }
+
+    /**
+     * Every `.gd` under the project, except addons, Godot's cache and the framework's test files.
+     * Reads from disk, which is what Godot compiles and runs.
+     */
+    private async coverageFiles(project: GodotProject): Promise<CoverageSession['files']> {
+        const exclude = new vscode.RelativePattern(project.root, '**/{addons,.godot}/**');
+        const testUris = new Set(
+            (
+                await vscode.workspace.findFiles(
+                    new vscode.RelativePattern(project.root, project.adapter.discovery.fileFilter),
+                    exclude,
+                )
+            ).map((uri) => uri.toString()),
+        );
+        const uris = (
+            await vscode.workspace.findFiles(
+                new vscode.RelativePattern(project.root, '**/*.gd'),
+                exclude,
+            )
+        ).filter((uri) => !testUris.has(uri.toString()));
+
+        const files: CoverageSession['files'] = [];
+        for (const uri of uris) {
+            const resPath = toResPath(project.root, uri.fsPath);
+            if (!resPath) {
+                continue;
+            }
+            let source: string;
+            try {
+                source = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(uri));
+            } catch (error) {
+                const detail = error instanceof Error ? error.message : String(error);
+                this.log(`Skipping ${uri.fsPath} for coverage: ${detail}`);
+                continue;
+            }
+            const executable = executableLines(source);
+            if (executable.length > 0) {
+                files.push({ resPath, uri, source, executable });
             }
         }
+        return files;
+    }
+
+    private publishCoverage(
+        session: CoverageSession,
+        hits: Map<string, Set<number>>,
+        disconnectedEarly: boolean,
+        run: vscode.TestRun,
+    ): void {
+        if (!session.server.hasConnected) {
+            this.log('Debugger did not connect; no coverage.');
+            return;
+        }
+        if (disconnectedEarly) {
+            this.log('Debugger disconnected mid-run; coverage is partial.');
+        }
+        const inputs: FileCoverageInput[] = session.files.map((file) => ({
+            uri: file.uri,
+            source: file.source,
+            executable: file.executable,
+            hits: hits.get(file.resPath) ?? new Set<number>(),
+        }));
+        addCoverage(run, inputs);
+        this.log(`Published coverage for ${inputs.length} scripts.`);
     }
 
     private publish(run: vscode.TestRun, item: vscode.TestItem, result: TestResult): void {

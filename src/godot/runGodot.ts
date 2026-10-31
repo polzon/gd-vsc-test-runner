@@ -14,6 +14,8 @@ export interface GodotProcessOptions {
     onOutput?: (chunk: string) => void;
     /** Kills the process when aborted. */
     signal?: AbortSignal;
+    /** Called when the process exits, before stdio is fully drained. */
+    onExit?: () => void;
 }
 
 /** Run the Godot executable to completion, collecting stdout. */
@@ -43,6 +45,7 @@ export function runGodot(
             options.signal?.removeEventListener('abort', onAbort);
             resolve({ exitCode: undefined, stdout, spawnError });
         });
+        child.on('exit', () => options.onExit?.());
         child.on('close', (code) => {
             options.signal?.removeEventListener('abort', onAbort);
             resolve({ exitCode: code ?? undefined, stdout });

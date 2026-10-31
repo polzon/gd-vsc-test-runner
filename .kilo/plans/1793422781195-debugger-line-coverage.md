@@ -28,6 +28,19 @@ There is no addon in the project and no rewriting of scripts. The stock Godot ed
 - `--ignore-error-breaks` stops runtime script errors from pausing the run.
   `-b/--breakpoints source:line,…` exists, but Windows command lines are too short to list every line.
 
+## Spike findings (Godot 4.7.2, demo project)
+
+- Every envelope used thread id `1`; `debug_enter` data was `[true, "Breakpoint", true, 1]`.
+  Godot's `Thread::MAIN_ID` is `1`, and that is the only thread registered at startup.
+- Breakpoints sent immediately after connect, before `set_pid`, applied before the first test ran.
+- `get_stack_dump` and `continue` sent back to back work; `stack_dump` frame 0 was
+  `res://test/test_example_test.gd`, line 5 for a breakpoint on line 5 (1-based).
+- A breakpoint on a line inside brackets (line 11) never fired, matching the compiler rule.
+- Each break round trip took about 15-20 ms; GdUnit4 reported 27 ms for a test that normally
+  takes 29 ms, so pauses do not threaten the test timeout.
+- GdUnit4 results still appeared on stdout while the debugger was connected.
+- `--ignore-error-breaks` must go before the script path, next to the other engine flags.
+
 ## Run flow (coverage profile)
 
 1. Collect the in-scope scripts: every `.gd` under the project root, except `addons/`, `.godot/`, and

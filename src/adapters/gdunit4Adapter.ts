@@ -140,12 +140,13 @@ function buildRunArgs(request: RunRequestInfo): string[] {
         '-s',
         '-d',
         '--remote-debug',
-        'tcp://127.0.0.1:0',
-        CMD_TOOL,
-        '-c',
-        '-rd',
-        REPORT_DIR,
+        request.debuggerUri ?? 'tcp://127.0.0.1:0',
     ];
+    if (request.debuggerUri) {
+        // Runtime script errors must not pause a coverage run.
+        args.push('--ignore-error-breaks');
+    }
+    args.push(CMD_TOOL, '-c', '-rd', REPORT_DIR);
     if (request.includeFiles.length === 0) {
         // Everything except the addons themselves (gdUnit4 ships its own test suites).
         args.push('-a', 'res://', '-i', 'res://addons');
