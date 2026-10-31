@@ -13,27 +13,42 @@ type Outcome = 'started' | 'passed' | 'failed' | 'errored' | 'skipped';
 function recordingController() {
     const outcomes = new Map<string, Outcome>();
     const messages = new Map<string, vscode.TestMessage>();
-    const set = (outcome: Outcome) => (item: vscode.TestItem, message?: vscode.TestMessage | readonly vscode.TestMessage[]) => {
-        outcomes.set(item.label, outcome);
-        if (message) {
-            messages.set(item.label, Array.isArray(message) ? message[0] : message as vscode.TestMessage);
-        }
-    };
+    const set =
+        (outcome: Outcome) =>
+        (item: vscode.TestItem, message?: vscode.TestMessage | readonly vscode.TestMessage[]) => {
+            outcomes.set(item.label, outcome);
+            if (message) {
+                messages.set(
+                    item.label,
+                    Array.isArray(message) ? message[0] : (message as vscode.TestMessage),
+                );
+            }
+        };
     const run = {
-        started: set('started'), passed: set('passed'), failed: set('failed'),
-        errored: set('errored'), skipped: set('skipped'), enqueued: () => { },
-        appendOutput: () => { }, end: () => { },
+        started: set('started'),
+        passed: set('passed'),
+        failed: set('failed'),
+        errored: set('errored'),
+        skipped: set('skipped'),
+        enqueued: () => {},
+        appendOutput: () => {},
+        end: () => {},
     } as unknown as vscode.TestRun;
     return { controller: { createTestRun: () => run }, outcomes, messages };
 }
 
-/** Runs inside the Extension Development Host with the demo Godot project opened (see .vscode-test.mjs). */
+/**
+ * Runs inside the Extension Development Host with the demo Godot project opened
+ * (see .vscode-test.mjs).
+ */
 suite('Extension (demo project)', function () {
     this.timeout(120_000);
     let api: ExtensionApi;
 
     suiteSetup(async () => {
-        const extension = vscode.extensions.getExtension<ExtensionApi>('polzon.gdscript-test-runner');
+        const extension = vscode.extensions.getExtension<ExtensionApi>(
+            'polzon.gdscript-test-runner',
+        );
         assert.ok(extension, 'extension is installed in the test host');
         api = await extension.activate();
         await api.tree.discover();
@@ -42,7 +57,10 @@ suite('Extension (demo project)', function () {
     test('discovers the demo suite and its test cases, ignoring addon suites', async () => {
         const files: vscode.TestItem[] = [];
         api.controller.items.forEach((item) => files.push(item));
-        assert.deepStrictEqual(files.map((f) => f.uri?.fsPath.toLowerCase()), [SUITE_FILE.toLowerCase()]);
+        assert.deepStrictEqual(
+            files.map((f) => f.uri?.fsPath.toLowerCase()),
+            [SUITE_FILE.toLowerCase()],
+        );
 
         await api.tree.ensureResolved();
         const names: string[] = [];
@@ -63,11 +81,17 @@ suite('Extension (demo project)', function () {
 
     test('runs the whole project and publishes results', async () => {
         const recorder = recordingController();
-        const orchestrator = new RunOrchestrator(recorder.controller, api.tree, () => { });
-        await orchestrator.run(new vscode.TestRunRequest(), new vscode.CancellationTokenSource().token);
+        const orchestrator = new RunOrchestrator(recorder.controller, api.tree, () => {});
+        await orchestrator.run(
+            new vscode.TestRunRequest(),
+            new vscode.CancellationTokenSource().token,
+        );
 
-        assert.strictEqual(recorder.outcomes.get('test_success'), 'passed',
-            String(recorder.messages.get('test_success')?.message));
+        assert.strictEqual(
+            recorder.outcomes.get('test_success'),
+            'passed',
+            String(recorder.messages.get('test_success')?.message),
+        );
         assert.strictEqual(recorder.outcomes.get('test_failure'), 'failed');
         const failure = recorder.messages.get('test_failure');
         assert.match(String(failure?.message), /This is supposed to fail\./);
@@ -76,12 +100,18 @@ suite('Extension (demo project)', function () {
 
     test('runs only the requested test', async () => {
         const recorder = recordingController();
-        const orchestrator = new RunOrchestrator(recorder.controller, api.tree, () => { });
+        const orchestrator = new RunOrchestrator(recorder.controller, api.tree, () => {});
         const item = api.tree.findTest(SUITE_FILE, 'test_success');
         assert.ok(item);
-        await orchestrator.run(new vscode.TestRunRequest([item]), new vscode.CancellationTokenSource().token);
+        await orchestrator.run(
+            new vscode.TestRunRequest([item]),
+            new vscode.CancellationTokenSource().token,
+        );
 
-        assert.deepStrictEqual([...recorder.outcomes.entries()], [['test_success', 'passed']],
-            String(recorder.messages.get('test_success')?.message));
+        assert.deepStrictEqual(
+            [...recorder.outcomes.entries()],
+            [['test_success', 'passed']],
+            String(recorder.messages.get('test_success')?.message),
+        );
     });
 });

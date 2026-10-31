@@ -8,9 +8,18 @@ import {
 } from './types';
 
 const MOCK_TEST_CASES: TestCaseDescriptor[] = [
-    { name: 'test_addition', range: { startLine: 3, startCharacter: 0, endLine: 5, endCharacter: 0 } },
-    { name: 'test_subtraction', range: { startLine: 7, startCharacter: 0, endLine: 9, endCharacter: 0 } },
-    { name: 'test_multiplication', range: { startLine: 11, startCharacter: 0, endLine: 13, endCharacter: 0 } },
+    {
+        name: 'test_addition',
+        range: { startLine: 3, startCharacter: 0, endLine: 5, endCharacter: 0 },
+    },
+    {
+        name: 'test_subtraction',
+        range: { startLine: 7, startCharacter: 0, endLine: 9, endCharacter: 0 },
+    },
+    {
+        name: 'test_multiplication',
+        range: { startLine: 11, startCharacter: 0, endLine: 13, endCharacter: 0 },
+    },
 ];
 
 const MOCK_RESULTS: TestResult[] = [
@@ -21,7 +30,10 @@ const MOCK_RESULTS: TestResult[] = [
 
 const discovery: DiscoveryRules = {
     fileFilter: '**/test_*.gd',
-    async parseTestCases(_content: string, _context?: DiscoveryContext): Promise<TestCaseDescriptor[]> {
+    async parseTestCases(
+        _content: string,
+        _context?: DiscoveryContext,
+    ): Promise<TestCaseDescriptor[]> {
         return MOCK_TEST_CASES.map((t) => ({ ...t, range: { ...t.range } }));
     },
 };

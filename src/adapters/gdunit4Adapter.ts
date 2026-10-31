@@ -16,7 +16,10 @@ import {
 const ADDON_DIR = path.join('addons', 'gdUnit4');
 const CMD_TOOL = 'res://addons/gdUnit4/bin/GdUnitCmdTool.gd';
 
-/** Reports go to a temp dir so runs don't litter the user's project with `res://reports/report_N`. */
+/**
+ * Reports go to a temp dir so runs don't litter the user's project with
+ * `res://reports/report_N`.
+ */
 const REPORT_DIR = path.join(os.tmpdir(), 'gdscript-test-runner', 'gdunit4-reports');
 
 const SUITE_CLASS = 'GdUnitTestSuite';
@@ -43,7 +46,10 @@ async function extendsTestSuite(content: string, context?: DiscoveryContext): Pr
     return lineage.some(isSuiteTarget);
 }
 
-async function parseTestCases(content: string, context?: DiscoveryContext): Promise<TestCaseDescriptor[]> {
+async function parseTestCases(
+    content: string,
+    context?: DiscoveryContext,
+): Promise<TestCaseDescriptor[]> {
     if (!(await extendsTestSuite(content, context))) {
         return [];
     }
@@ -57,7 +63,12 @@ async function parseTestCases(content: string, context?: DiscoveryContext): Prom
         const endLine = lastBodyLine(lines, index);
         cases.push({
             name: match[1],
-            range: { startLine: index, startCharacter: 0, endLine, endCharacter: lines[endLine].length },
+            range: {
+                startLine: index,
+                startCharacter: 0,
+                endLine,
+                endCharacter: lines[endLine].length,
+            },
         });
     });
     return cases;
@@ -124,12 +135,16 @@ function requireResPath(projectRoot: string, file: string): string {
 function buildRunArgs(request: RunRequestInfo): string[] {
     const { projectRoot } = request;
     const args = [
-        '--path', projectRoot,
-        '-s', '-d',
-        '--remote-debug', 'tcp://127.0.0.1:0',
+        '--path',
+        projectRoot,
+        '-s',
+        '-d',
+        '--remote-debug',
+        'tcp://127.0.0.1:0',
         CMD_TOOL,
         '-c',
-        '-rd', REPORT_DIR,
+        '-rd',
+        REPORT_DIR,
     ];
     if (request.includeFiles.length === 0) {
         // Everything except the addons themselves (gdUnit4 ships its own test suites).

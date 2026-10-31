@@ -5,10 +5,16 @@ import { SourceLocation, TestResult, TestStatus } from './types';
 const ANSI_ESCAPE = /\u001b\[[0-9;?]*[A-Za-z]/g;
 
 /** `  res://test/test_x.gd > test_name PASSED 12ms` (detailed console reporter format). */
-const TEST_LINE = /^\s*(res:\/\/\S+?\.gd) > (.+?) (STARTED|PASSED|FAILED|SKIPPED|WARNING|FLAKY)\b[^\d]*(.*)$/;
+const TEST_LINE =
+    /^\s*(res:\/\/\S+?\.gd) > (.+?) (STARTED|PASSED|FAILED|SKIPPED|WARNING|FLAKY)\b[^\d]*(.*)$/;
 
 /** Lines that close the report block following a test result. */
-const BLOCK_TERMINATORS = [/^Statistics:/, /^Run Test Suite:/, /^Overall Summary:/, /^\S+ > finalize\(\)/];
+const BLOCK_TERMINATORS = [
+    /^Statistics:/,
+    /^Run Test Suite:/,
+    /^Overall Summary:/,
+    /^\S+ > finalize\(\)/,
+];
 
 /** `at 'test_name' in res://test/test_x.gd:10` stack-trace entries. */
 const STACK_FRAME = /\s*at '[^']*' in (res:\/\/[^\s:]+):(\d+)/g;
@@ -47,7 +53,11 @@ export function parseGdUnit4Output(rawOutput: string, projectRoot: string): Test
             const [, resPath, name, statusWord, rest] = match;
             const status = STATUS_MAP[statusWord];
             if (status) {
-                const result: TestResult = { name, file: fromResPath(projectRoot, resPath), status };
+                const result: TestResult = {
+                    name,
+                    file: fromResPath(projectRoot, resPath),
+                    status,
+                };
                 const duration = parseDuration(rest);
                 if (duration !== undefined) {
                     result.duration = duration;
@@ -71,9 +81,7 @@ function finalizeReport(pending: PendingResult, projectRoot: string): void {
     if (result.status === 'passed' && !pending.reportLines.some((l) => l.trim() !== '')) {
         return;
     }
-    let text = pending.reportLines
-        .filter((l) => l.trim() !== 'Report:')
-        .join('\n');
+    let text = pending.reportLines.filter((l) => l.trim() !== 'Report:').join('\n');
 
     const location = firstStackFrame(text, projectRoot);
     if (location) {

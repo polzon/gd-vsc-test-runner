@@ -35,6 +35,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check formatting
+        run: npm run format:check
+
       # Reuses the ~332 MB VS Code download from @vscode/test-electron instead
       # of re-fetching it on every run. Bump the key when VS Code stable advances.
       - name: Cache VS Code test binary

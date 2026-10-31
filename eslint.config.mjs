@@ -1,4 +1,5 @@
 import typescriptEslint from "typescript-eslint";
+import eslintConfigPrettier from "eslint-config-prettier/flat";
 
 export default [{
     files: ["**/*.ts"],
@@ -19,9 +20,18 @@ export default [{
             format: ["camelCase", "PascalCase"],
         }],
 
-        curly: "warn",
         eqeqeq: "warn",
         "no-throw-literal": "warn",
-        semi: "warn",
+    },
+}, eslintConfigPrettier, {
+    files: ["**/*.ts"],
+    rules: {
+        curly: "warn",
+        "max-len": ["warn", {
+            code: 100,
+            ignoreUrls: false,
+            ignoreStrings: false,
+            ignoreTemplateLiterals: false,
+        }],
     },
 }];

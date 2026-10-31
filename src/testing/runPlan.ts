@@ -14,7 +14,10 @@ export interface RunPlan {
 }
 
 function matches(selection: Selection, test: TestRef): boolean {
-    return selection.file === test.file && (selection.test === undefined || selection.test === test.name);
+    return (
+        selection.file === test.file &&
+        (selection.test === undefined || selection.test === test.name)
+    );
 }
 
 /**
@@ -27,9 +30,15 @@ function matches(selection: Selection, test: TestRef): boolean {
  * @param include selections to run; undefined means everything in `known`
  * @param exclude selections to leave out
  */
-export function buildRunPlan(known: TestRef[], include: Selection[] | undefined, exclude: Selection[]): RunPlan {
-    const tests = known.filter((t) =>
-        (include === undefined || include.some((s) => matches(s, t))) && !exclude.some((s) => matches(s, t)),
+export function buildRunPlan(
+    known: TestRef[],
+    include: Selection[] | undefined,
+    exclude: Selection[],
+): RunPlan {
+    const tests = known.filter(
+        (t) =>
+            (include === undefined || include.some((s) => matches(s, t))) &&
+            !exclude.some((s) => matches(s, t)),
     );
     const includeFiles = [...new Set(tests.map((t) => t.file))];
     const selected = new Set(tests);

@@ -41,7 +41,10 @@ suite('GdScriptClassResolver', () => {
             'test/test_leaf.gd': 'extends "res://base.gd"\n',
         });
         const file = path.join(root, 'test', 'test_leaf.gd');
-        const chain = await new GdScriptClassResolver(root).lineage('extends "res://base.gd"\n', file);
+        const chain = await new GdScriptClassResolver(root).lineage(
+            'extends "res://base.gd"\n',
+            file,
+        );
         assert.deepStrictEqual(chain, ['res://base.gd', 'GdUnitTestSuite']);
     });
 
@@ -51,12 +54,18 @@ suite('GdScriptClassResolver', () => {
             'test/b.gd': 'class_name B\nextends A\n',
         });
         const resolver = new GdScriptClassResolver(root);
-        assert.deepStrictEqual(await resolver.lineage('extends Node\n', path.join(root, 'test', 'a.gd')), ['Node']);
+        assert.deepStrictEqual(
+            await resolver.lineage('extends Node\n', path.join(root, 'test', 'a.gd')),
+            ['Node'],
+        );
         assert.deepStrictEqual(
             await resolver.lineage('extends Unknown\n', path.join(root, 'test', 'a.gd')),
             ['Unknown'],
         );
-        assert.deepStrictEqual(await resolver.lineage('extends A\n', path.join(root, 'test', 'a.gd')), ['A', 'B']);
+        assert.deepStrictEqual(
+            await resolver.lineage('extends A\n', path.join(root, 'test', 'a.gd')),
+            ['A', 'B'],
+        );
     });
 
     test('finds the file declaring a class_name', async () => {
@@ -80,9 +89,16 @@ suite('GdScriptClassResolver', () => {
             const file = path.join(testDir, 'test_leaf.gd');
 
             const resolver = new GdScriptClassResolver(root);
-            assert.deepStrictEqual(await resolver.lineage('extends "../outside.gd"\n', file), ['../outside.gd']);
-            assert.deepStrictEqual(await resolver.lineage('extends "res://../outside.gd"\n', file), ['res://../outside.gd']);
-            assert.deepStrictEqual(await resolver.lineage(`extends "${outside}"\n`, file), [outside]);
+            assert.deepStrictEqual(await resolver.lineage('extends "../outside.gd"\n', file), [
+                '../outside.gd',
+            ]);
+            assert.deepStrictEqual(
+                await resolver.lineage('extends "res://../outside.gd"\n', file),
+                ['res://../outside.gd'],
+            );
+            assert.deepStrictEqual(await resolver.lineage(`extends "${outside}"\n`, file), [
+                outside,
+            ]);
         } finally {
             fs.rmSync(parent, { recursive: true, force: true });
         }
@@ -97,7 +113,11 @@ suite('GdScriptClassResolver', () => {
             fs.mkdirSync(testDir, { recursive: true });
             fs.mkdirSync(outside, { recursive: true });
             fs.writeFileSync(path.join(outside, 'base.gd'), 'extends GdUnitTestSuite\n');
-            fs.symlinkSync(outside, path.join(root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
+            fs.symlinkSync(
+                outside,
+                path.join(root, 'linked'),
+                process.platform === 'win32' ? 'junction' : 'dir',
+            );
             const file = path.join(testDir, 'test_leaf.gd');
 
             const resolver = new GdScriptClassResolver(root);

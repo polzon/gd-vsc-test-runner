@@ -23,7 +23,12 @@ function isIgnored(projectRoot: string, file: string): boolean {
 }
 
 function toRange(range: SourceRange): vscode.Range {
-    return new vscode.Range(range.startLine, range.startCharacter, range.endLine, range.endCharacter);
+    return new vscode.Range(
+        range.startLine,
+        range.startCharacter,
+        range.endLine,
+        range.endCharacter,
+    );
 }
 
 /**
@@ -92,7 +97,10 @@ export class TestTree implements vscode.Disposable {
      * so existing items (and their results) survive and runs in progress keep valid items.
      */
     refresh(): Promise<void> {
-        this.refreshQueue = this.refreshQueue.then(() => this.rebuild(), () => this.rebuild());
+        this.refreshQueue = this.refreshQueue.then(
+            () => this.rebuild(),
+            () => this.rebuild(),
+        );
         return this.refreshQueue;
     }
 
@@ -117,34 +125,51 @@ export class TestTree implements vscode.Disposable {
         }
     }
 
-    /** Parse a file item's test cases, from the open editor if there is one, otherwise from disk. */
+    /**
+     * Parse a file item's test cases, from the open editor if there is one,
+     * otherwise from disk.
+     */
     async resolveFile(item: vscode.TestItem, content?: string): Promise<void> {
         const data = this.data.get(item);
         if (data?.kind !== 'file' || !item.uri) {
             return;
         }
         try {
-            const text = content ?? await readText(item.uri);
+            const text = content ?? (await readText(item.uri));
             const cases = await data.project.adapter.discovery.parseTestCases(text, {
                 projectRoot: data.project.root,
                 file: data.file,
             });
-            item.children.replace(cases.map((c) => {
-                const child = this.controller.createTestItem(testId(item, c.name), c.name, item.uri);
-                child.range = toRange(c.range);
-                this.data.set(child, { kind: 'test', project: data.project, file: data.file, name: c.name });
-                return child;
-            }));
+            item.children.replace(
+                cases.map((c) => {
+                    const child = this.controller.createTestItem(
+                        testId(item, c.name),
+                        c.name,
+                        item.uri,
+                    );
+                    child.range = toRange(c.range);
+                    this.data.set(child, {
+                        kind: 'test',
+                        project: data.project,
+                        file: data.file,
+                        name: c.name,
+                    });
+                    return child;
+                }),
+            );
             item.error = undefined;
         } catch (err) {
-            item.error = `Failed to read test file: ${err instanceof Error ? err.message : String(err)}`;
+            const detail = err instanceof Error ? err.message : String(err);
+            item.error = `Failed to read test file: ${detail}`;
         }
         item.canResolveChildren = false;
     }
 
     /** Make sure the given file items (or every file item) have parsed children. */
     async ensureResolved(items: readonly vscode.TestItem[] = this.fileItems()): Promise<void> {
-        await Promise.all(items.filter((i) => i.canResolveChildren).map((i) => this.resolveFile(i)));
+        await Promise.all(
+            items.filter((i) => i.canResolveChildren).map((i) => this.resolveFile(i)),
+        );
     }
 
     dispose(): void {
@@ -160,9 +185,12 @@ export class TestTree implements vscode.Disposable {
             const adapter = await detectAdapter(root);
             if (adapter) {
                 const version = await adapter.detectVersion(root);
-                this.log(`Found ${adapter.displayName}${version ? ` ${version}` : ''} in Godot project: ${root}`);
+                const label = `${adapter.displayName}${version ? ` ${version}` : ''}`;
+                this.log(`Found ${label} in Godot project: ${root}`);
                 // Keep project identity stable across refreshes; items reference it.
-                const existing = this.projects.find((p) => p.root === root && p.adapter === adapter);
+                const existing = this.projects.find(
+                    (p) => p.root === root && p.adapter === adapter,
+                );
                 projects.push(existing ?? { root, adapter });
             } else {
                 this.log(`No supported test framework found in Godot project: ${root}`);
@@ -175,7 +203,10 @@ export class TestTree implements vscode.Disposable {
     }
 
     private async discoverFiles(project: GodotProject): Promise<vscode.TestItem[]> {
-        const pattern = new vscode.RelativePattern(project.root, project.adapter.discovery.fileFilter);
+        const pattern = new vscode.RelativePattern(
+            project.root,
+            project.adapter.discovery.fileFilter,
+        );
         const files = await vscode.workspace.findFiles(pattern, IGNORED_GLOB);
         return files
             .map((uri) => this.getOrCreateFile(project, uri))
@@ -183,7 +214,10 @@ export class TestTree implements vscode.Disposable {
     }
 
     private watch(project: GodotProject): void {
-        const pattern = new vscode.RelativePattern(project.root, project.adapter.discovery.fileFilter);
+        const pattern = new vscode.RelativePattern(
+            project.root,
+            project.adapter.discovery.fileFilter,
+        );
         const watcher = vscode.workspace.createFileSystemWatcher(pattern);
         const invalidate = (): void => project.adapter.discovery.invalidate?.(project.root);
         watcher.onDidCreate((uri) => {
@@ -254,7 +288,11 @@ export class TestTree implements vscode.Disposable {
         if (existing) {
             return existing;
         }
-        const item = this.controller.createTestItem(uri.toString(), vscode.workspace.asRelativePath(uri), uri);
+        const item = this.controller.createTestItem(
+            uri.toString(),
+            vscode.workspace.asRelativePath(uri),
+            uri,
+        );
         item.canResolveChildren = true;
         this.data.set(item, { kind: 'file', project, file: uri.fsPath });
         this.controller.items.add(item);
