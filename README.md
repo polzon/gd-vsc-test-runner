@@ -47,7 +47,9 @@ Anything under `addons/` and `.godot/` is ignored during discovery.
 
 - `npm run compile`: type-check, lint and bundle.
 - `npm test`: runs the unit and integration tests in a VS Code test host opened on
-  `src/demo/gdunit4-adapter-demo`. The integration tests need `godot` on `PATH`.
+  `src/test/demo/gdunit4-adapter-demo`. The integration tests need `godot` on `PATH`.
+- Fresh clone: run `git submodule update --init --recursive`. `npm test` copies the pinned
+  GdUnit4 addon from `src/test/vendor/gdUnit4` into the demo project before running.
 - `F5`: launches the Extension Development Host with the demo project open.
 
 ## Build & Install

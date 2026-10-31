@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-const DEMO_PROJECT_ROOT = path.resolve(__dirname, '../../src/demo/gdunit4-adapter-demo');
+const DEMO_PROJECT_ROOT = path.resolve(__dirname, '../../src/test/demo/gdunit4-adapter-demo');
 
 /** The demo Godot project opened by the extension test host (see `.vscode-test.mjs`). */
 export const DEMO_PROJECT = DEMO_PROJECT_ROOT;

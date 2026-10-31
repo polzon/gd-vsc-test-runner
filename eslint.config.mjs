@@ -2,6 +2,8 @@ import typescriptEslint from "typescript-eslint";
 import eslintConfigPrettier from "eslint-config-prettier/flat";
 
 export default [{
+    ignores: ["src/test/vendor/**", "src/test/demo/**"],
+}, {
     files: ["**/*.ts"],
 }, {
     plugins: {
