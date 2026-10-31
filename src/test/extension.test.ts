@@ -50,7 +50,9 @@ suite('Extension (demo project)', function () {
             'polzon.gdscript-test-runner',
         );
         assert.ok(extension, 'extension is installed in the test host');
-        api = await extension.activate();
+        const activated = await extension.activate();
+        assert.ok(activated, 'extension activates in the demo Godot project');
+        api = activated;
         await api.tree.discover();
     });
 

@@ -10,7 +10,17 @@ export interface ExtensionApi {
     tree: TestTree;
 }
 
-export function activate(context: vscode.ExtensionContext): ExtensionApi {
+/**
+ * Activation is triggered by the project.godot activation event (see package.json). VS Code ORs
+ * activation events, so the second condition — a visible GDScript file — is checked here.
+ */
+export async function activate(
+    context: vscode.ExtensionContext,
+): Promise<ExtensionApi | undefined> {
+    if (!(await hasGdscriptFile())) {
+        return undefined;
+    }
+
     const output = vscode.window.createOutputChannel('GDScript Test Runner');
     const log = (message: string): void => output.appendLine(message);
     log('GDScript Test Runner activated.');
@@ -32,6 +42,12 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
 }
 
 export function deactivate(): void {}
+
+/** True when a GDScript file is visible in the workspace (respects files.exclude). */
+async function hasGdscriptFile(): Promise<boolean> {
+    const found = await vscode.workspace.findFiles('**/*.gd', undefined, 1);
+    return found.length > 0;
+}
 
 function logGodotResolution(log: (message: string) => void): void {
     const result = resolveGodot(getConfiguredGodotPath());
