@@ -10,6 +10,7 @@ export interface GodotProject {
 }
 
 export type ItemData =
+    | { kind: 'folder'; project: GodotProject; dir: string }
     | { kind: 'file'; project: GodotProject; file: string }
     | { kind: 'test'; project: GodotProject; file: string; name: string };
 
@@ -37,6 +38,7 @@ function toRange(range: SourceRange): vscode.Range {
  */
 export class TestTree implements vscode.Disposable {
     private readonly data = new WeakMap<vscode.TestItem, ItemData>();
+    private readonly itemsById = new Map<string, vscode.TestItem>();
     private readonly watchers: vscode.Disposable[] = [];
     private readonly listeners: vscode.Disposable[] = [];
     private projects: GodotProject[] = [];
@@ -73,16 +75,39 @@ export class TestTree implements vscode.Disposable {
 
     fileItems(project?: GodotProject): vscode.TestItem[] {
         const items: vscode.TestItem[] = [];
-        this.controller.items.forEach((item) => {
-            if (!project || this.data.get(item)?.project === project) {
+        this.walk(this.controller.items, (item) => {
+            const data = this.data.get(item);
+            if (data?.kind === 'file' && (!project || data.project === project)) {
                 items.push(item);
             }
         });
         return items;
     }
 
+    /** File items represented by an item: itself, a test's file, or every file in a folder. */
+    fileItemsIn(item: vscode.TestItem): vscode.TestItem[] {
+        const data = this.data.get(item);
+        if (data?.kind === 'file') {
+            return [item];
+        }
+        if (data?.kind === 'test') {
+            const parent = item.parent;
+            return parent && this.data.get(parent)?.kind === 'file' ? [parent] : [];
+        }
+        if (data?.kind !== 'folder') {
+            return [];
+        }
+        const files: vscode.TestItem[] = [];
+        this.walk(item.children, (child) => {
+            if (this.data.get(child)?.kind === 'file') {
+                files.push(child);
+            }
+        });
+        return files;
+    }
+
     findTest(file: string, name: string): vscode.TestItem | undefined {
-        const fileItem = this.controller.items.get(vscode.Uri.file(file).toString());
+        const fileItem = this.itemsById.get(vscode.Uri.file(file).toString());
         return fileItem?.children.get(testId(fileItem, name));
     }
 
@@ -119,7 +144,8 @@ export class TestTree implements vscode.Disposable {
         }
         this.fileItems()
             .filter((item) => !found.has(item.id))
-            .forEach((item) => this.controller.items.delete(item.id));
+            .forEach((item) => this.removeFile(item));
+        this.pruneEmptyFolders(this.controller.items);
         for (const doc of vscode.workspace.textDocuments) {
             this.onDocument(doc);
         }
@@ -229,14 +255,14 @@ export class TestTree implements vscode.Disposable {
         });
         watcher.onDidChange((uri) => {
             invalidate();
-            const item = this.controller.items.get(uri.toString());
+            const item = this.itemsById.get(uri.toString());
             if (item) {
                 void this.resolveFile(item);
             }
         });
         watcher.onDidDelete((uri) => {
             invalidate();
-            this.controller.items.delete(uri.toString());
+            this.removeFileById(uri.toString());
         });
         this.watchers.push(watcher);
 
@@ -244,7 +270,7 @@ export class TestTree implements vscode.Disposable {
             new vscode.RelativePattern(project.root, '**/*.gd'),
         );
         const onSourceChange = (uri: vscode.Uri): void => {
-            if (this.controller.items.get(uri.toString())) {
+            if (this.itemsById.get(uri.toString())) {
                 return;
             }
             invalidate();
@@ -284,24 +310,97 @@ export class TestTree implements vscode.Disposable {
         if (isIgnored(project.root, uri.fsPath)) {
             return undefined;
         }
-        const existing = this.controller.items.get(uri.toString());
+        const id = uri.toString();
+        const existing = this.itemsById.get(id);
         if (existing) {
             return existing;
         }
-        const item = this.controller.createTestItem(
-            uri.toString(),
-            vscode.workspace.asRelativePath(uri),
-            uri,
-        );
+        const item = this.controller.createTestItem(id, path.basename(uri.fsPath), uri);
         item.canResolveChildren = true;
         this.data.set(item, { kind: 'file', project, file: uri.fsPath });
-        this.controller.items.add(item);
+        this.itemsById.set(id, item);
+
+        const dir = path.dirname(uri.fsPath);
+        if (dir === project.root) {
+            this.controller.items.add(item);
+        } else {
+            this.getOrCreateFolder(project, dir).children.add(item);
+        }
         return item;
+    }
+
+    /** Create a directory node (and its ancestors) so files display in a tree. */
+    private getOrCreateFolder(project: GodotProject, dir: string): vscode.TestItem {
+        const id = folderId(project, dir);
+        const existing = this.itemsById.get(id);
+        if (existing) {
+            return existing;
+        }
+        const item = this.controller.createTestItem(id, path.basename(dir));
+        this.data.set(item, { kind: 'folder', project, dir });
+        this.itemsById.set(id, item);
+
+        const parentDir = path.dirname(dir);
+        if (parentDir === project.root || !isWithin(project.root, parentDir)) {
+            this.controller.items.add(item);
+        } else {
+            this.getOrCreateFolder(project, parentDir).children.add(item);
+        }
+        return item;
+    }
+
+    private removeFile(item: vscode.TestItem): void {
+        (item.parent?.children ?? this.controller.items).delete(item.id);
+        this.itemsById.delete(item.id);
+    }
+
+    private removeFileById(id: string): void {
+        const item = this.itemsById.get(id);
+        if (!item) {
+            return;
+        }
+        this.removeFile(item);
+        this.pruneEmptyFolders(this.controller.items);
+    }
+
+    private pruneEmptyFolders(collection: vscode.TestItemCollection): void {
+        const folders: vscode.TestItem[] = [];
+        collection.forEach((item) => {
+            if (this.data.get(item)?.kind === 'folder') {
+                this.pruneEmptyFolders(item.children);
+                folders.push(item);
+            }
+        });
+        for (const folder of folders) {
+            if (folder.children.size === 0) {
+                collection.delete(folder.id);
+                this.itemsById.delete(folder.id);
+            }
+        }
+    }
+
+    private walk(
+        collection: vscode.TestItemCollection,
+        visit: (item: vscode.TestItem) => void,
+    ): void {
+        collection.forEach((item) => {
+            visit(item);
+            this.walk(item.children, visit);
+        });
     }
 
     private disposeWatchers(): void {
         this.watchers.splice(0).forEach((w) => w.dispose());
     }
+}
+
+function folderId(project: GodotProject, dir: string): string {
+    return `folder:${project.root}::${dir}`;
+}
+
+function isWithin(root: string, dir: string): boolean {
+    const relative = path.relative(root, dir);
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 function testId(fileItem: vscode.TestItem, name: string): string {
