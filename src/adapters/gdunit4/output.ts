@@ -1,5 +1,5 @@
-import { fromResPath } from '../godot/resPath';
-import { SourceLocation, TestResult, TestStatus } from './types';
+import { fromResPath } from '../../godot/resPath';
+import { SourceLocation, TestResult, TestStatus } from '../types';
 
 // Strips CSI escape sequences (colors, cursor movement) emitted by GdUnit4's console writer.
 const ANSI_ESCAPE = /\u001b\[[0-9;?]*[A-Za-z]/g;

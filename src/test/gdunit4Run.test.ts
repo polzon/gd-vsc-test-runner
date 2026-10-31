@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
-import { gdunit4Adapter } from '../adapters/gdunit4Adapter';
+import { gdunit4Adapter } from '../adapters/gdunit4';
 import { resolveGodot } from '../godot/godotResolver';
 import { runGodot } from '../godot/runGodot';
 

@@ -2,8 +2,8 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { gdunit4Adapter } from '../adapters/gdunit4Adapter';
-import { parseDuration } from '../adapters/gdunit4Output';
+import { gdunit4Adapter } from '../adapters/gdunit4';
+import { parseDuration } from '../adapters/gdunit4/output';
 
 const PROJECT_ROOT = path.resolve('/proj');
 const DEMO_PROJECT = path.resolve(__dirname, '../../src/demo/gdunit4-adapter-demo');

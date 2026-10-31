@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
-import { gdunit4Adapter } from '../adapters/gdunit4Adapter';
+import { gdunit4Adapter } from '../adapters/gdunit4';
 import { executableLines } from '../coverage/executableLines';
 import { collectLineHits } from '../coverage/lineCollector';
 import { DebuggerServer } from '../godot/debuggerServer';
