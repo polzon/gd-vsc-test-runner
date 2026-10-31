@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { getDetailedCoverage } from '../coverage/coverageStore';
 import type { ExtensionApi } from '../extension';
-import { RunOptions, RunOrchestrator } from '../testing/runOrchestrator';
+import { RunOptions, RunOrchestrator } from '../testExplorer/runOrchestrator';
 import { CALCULATOR_SCRIPT, CALCULATOR_TEST, SUITE_FILE } from './demoProject';
 import { recordingController } from './helpers/recordingController';
 

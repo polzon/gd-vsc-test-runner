@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { buildRunPlan } from '../testing/runPlan';
+import { buildRunPlan } from '../testExplorer/runPlan';
 
 const A = '/proj/test_a.gd';
 const B = '/proj/test_b.gd';
