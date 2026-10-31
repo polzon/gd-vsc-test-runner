@@ -44,14 +44,23 @@ async function readText(file: string): Promise<string | undefined> {
     }
 }
 
+async function realPath(file: string): Promise<string | undefined> {
+    try {
+        return await fs.realpath(file);
+    } catch {
+        return undefined;
+    }
+}
+
 /**
  * Resolves GDScript `extends` chains across a Godot project by following `class_name`
  * declarations and script paths. One instance caches the project's class index.
  */
 export class GdScriptClassResolver {
     private index?: Promise<Map<string, string>>;
-    private readonly misses = new Set<string>();
-    private readonly contents = new Map<string, string | undefined>();
+    private readonly contents = new Map<string, string>();
+    private generation = 0;
+    private projectRealPath?: Promise<string | undefined>;
 
     constructor(private readonly projectRoot: string) { }
 
@@ -86,23 +95,22 @@ export class GdScriptClassResolver {
 
     /** Absolute path of the project file that declares `className`, if there is one. */
     async find(className: string): Promise<string | undefined> {
-        const found = await this.findIn(await this.getClassIndex(), className);
-        if (found || this.misses.has(className)) {
+        const index = await this.getClassIndex();
+        if (!index.has(className)) {
+            return undefined;
+        }
+        const found = await this.findIn(index, className);
+        if (found) {
             return found;
         }
         const rebuilt = await this.rebuild();
-        const foundAfterRebuild = await this.findIn(rebuilt, className);
-        if (!foundAfterRebuild) {
-            this.misses.add(className);
-        }
-        return foundAfterRebuild;
+        return this.findIn(rebuilt, className);
     }
 
     /** Drop cached lookups after `.gd` files are added, changed, or deleted. */
     invalidate(): void {
         this.index = undefined;
-        this.misses.clear();
-        this.contents.clear();
+        this.resetContentCache();
     }
 
     private async findIn(index: Map<string, string>, className: string): Promise<string | undefined> {
@@ -115,10 +123,14 @@ export class GdScriptClassResolver {
     }
 
     private async rebuild(): Promise<Map<string, string>> {
-        this.contents.clear();
-        this.misses.clear();
+        this.resetContentCache();
         this.index = this.buildIndex();
         return this.index;
+    }
+
+    private resetContentCache(): void {
+        this.generation += 1;
+        this.contents.clear();
     }
 
     private async targetFile(target: string, fromFile: string): Promise<string | undefined> {
@@ -132,12 +144,17 @@ export class GdScriptClassResolver {
         return this.find(target);
     }
 
-    /** Keep inheritance lookups inside the project, even for `..` or absolute targets. */
-    private withinProject(file: string | undefined): string | undefined {
+    /** Keep inheritance lookups inside the project, even for `..`, absolute targets, or symlinks. */
+    private async withinProject(file: string | undefined): Promise<string | undefined> {
         if (!file) {
             return undefined;
         }
-        const relative = path.relative(this.projectRoot, file);
+        const root = await this.getProjectRealPath();
+        const target = await realPath(file);
+        if (!root || !target) {
+            return undefined;
+        }
+        const relative = path.relative(root, target);
         if (
             relative === ''
             || relative === '..'
@@ -146,15 +163,24 @@ export class GdScriptClassResolver {
         ) {
             return undefined;
         }
-        return file;
+        return target;
+    }
+
+    private getProjectRealPath(): Promise<string | undefined> {
+        this.projectRealPath ??= realPath(this.projectRoot);
+        return this.projectRealPath;
     }
 
     private async read(file: string): Promise<string | undefined> {
-        if (this.contents.has(file)) {
-            return this.contents.get(file);
+        const cached = this.contents.get(file);
+        if (cached !== undefined) {
+            return cached;
         }
+        const generation = this.generation;
         const content = await readText(file);
-        this.contents.set(file, content);
+        if (content !== undefined && generation === this.generation) {
+            this.contents.set(file, content);
+        }
         return content;
     }
 

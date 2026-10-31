@@ -209,10 +209,24 @@ export class TestTree implements vscode.Disposable {
         const sources = vscode.workspace.createFileSystemWatcher(
             new vscode.RelativePattern(project.root, '**/*.gd'),
         );
-        sources.onDidCreate(invalidate);
-        sources.onDidChange(invalidate);
-        sources.onDidDelete(invalidate);
+        const onSourceChange = (uri: vscode.Uri): void => {
+            if (this.controller.items.get(uri.toString())) {
+                return;
+            }
+            invalidate();
+            void this.revalidate(project);
+        };
+        sources.onDidCreate(onSourceChange);
+        sources.onDidChange(onSourceChange);
+        sources.onDidDelete(onSourceChange);
         this.watchers.push(sources);
+    }
+
+    /** Re-parse this project's test files after a source script changes. */
+    private async revalidate(project: GodotProject): Promise<void> {
+        for (const item of this.fileItems(project)) {
+            await this.resolveFile(item);
+        }
     }
 
     private onDocument(doc: vscode.TextDocument): void {

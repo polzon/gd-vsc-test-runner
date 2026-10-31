@@ -88,6 +88,28 @@ suite('GdScriptClassResolver', () => {
         }
     });
 
+    test('keeps symlinked targets inside the project', async () => {
+        const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'class-resolver-link-'));
+        try {
+            const root = path.join(parent, 'project');
+            const testDir = path.join(root, 'test');
+            const outside = path.join(parent, 'outside');
+            fs.mkdirSync(testDir, { recursive: true });
+            fs.mkdirSync(outside, { recursive: true });
+            fs.writeFileSync(path.join(outside, 'base.gd'), 'extends GdUnitTestSuite\n');
+            fs.symlinkSync(outside, path.join(root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
+            const file = path.join(testDir, 'test_leaf.gd');
+
+            const resolver = new GdScriptClassResolver(root);
+            assert.deepStrictEqual(
+                await resolver.lineage('extends "res://linked/base.gd"\n', file),
+                ['res://linked/base.gd'],
+            );
+        } finally {
+            fs.rmSync(parent, { recursive: true, force: true });
+        }
+    });
+
     test('picks up class_name declarations added after the index was built', async () => {
         const root = project({ 'test/test_leaf.gd': 'extends Later\n' });
         const resolver = new GdScriptClassResolver(root);
