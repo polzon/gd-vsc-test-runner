@@ -37,6 +37,29 @@ suite('buildRunPlan', () => {
         const plan = buildRunPlan(KNOWN, [{ file: '/proj/other.gd' }], []);
         assert.deepStrictEqual(plan, { includeFiles: [], excludeTests: [], tests: [] });
     });
+
+    test('selecting one parameter set runs the whole function', () => {
+        const known = [
+            { file: A, name: 'test_p:0 (1)', runName: 'test_p' },
+            { file: A, name: 'test_p:1 (2)', runName: 'test_p' },
+            { file: A, name: 'test_1' },
+        ];
+        const plan = buildRunPlan(known, [{ file: A, test: 'test_p:0 (1)' }], []);
+        assert.deepStrictEqual(plan.includeFiles, [A]);
+        assert.deepStrictEqual(plan.tests, [known[0]]);
+        assert.deepStrictEqual(plan.excludeTests, [{ file: A, name: 'test_1' }]);
+    });
+
+    test('ignores a parameterized function by its base name', () => {
+        const known = [
+            { file: A, name: 'test_p:0 (1)', runName: 'test_p' },
+            { file: A, name: 'test_p:1 (2)', runName: 'test_p' },
+            { file: A, name: 'test_1' },
+        ];
+        const plan = buildRunPlan(known, [{ file: A, test: 'test_1' }], []);
+        assert.deepStrictEqual(plan.tests, [known[2]]);
+        assert.deepStrictEqual(plan.excludeTests, [{ file: A, name: 'test_p' }]);
+    });
 });
 
 suite('resPath', () => {

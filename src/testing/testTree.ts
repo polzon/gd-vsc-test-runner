@@ -12,7 +12,13 @@ export interface GodotProject {
 export type ItemData =
     | { kind: 'folder'; project: GodotProject }
     | { kind: 'file'; project: GodotProject; file: string }
-    | { kind: 'test'; project: GodotProject; file: string; name: string };
+    | {
+          kind: 'test';
+          project: GodotProject;
+          file: string;
+          name: string;
+          runName?: string;
+      };
 
 /** Directories that never hold the project's own tests (addons ship their own suites). */
 const IGNORED_DIRS = ['addons', '.godot'];
@@ -179,6 +185,7 @@ export class TestTree implements vscode.Disposable {
                         project: data.project,
                         file: data.file,
                         name: c.name,
+                        runName: c.runName,
                     });
                     return child;
                 }),

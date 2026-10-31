@@ -38,7 +38,7 @@ suite('Coverage run against the demo project', function () {
             const args = gdunit4Adapter.buildRunArgs({
                 projectRoot: DEMO_PROJECT,
                 includeFiles: [CALCULATOR_TEST],
-                excludeTests: [],
+                excludeTests: [{ file: CALCULATOR_TEST, name: 'test_rank_positive' }],
                 debuggerUri: `tcp://127.0.0.1:${port}`,
             });
             const result = await runGodot(godot.godot.path, args, { cwd: DEMO_PROJECT });

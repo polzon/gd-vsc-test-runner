@@ -42,6 +42,31 @@ function testKey(file: string, name: string): string {
     return `${vscode.Uri.file(file).toString()}::${name}`;
 }
 
+/** `test_func:1 (2, "two")` split into its function name and parameter-set index. */
+function parameterCase(name: string): { base: string; index: string } | undefined {
+    const match = /^(.*?):(\d+) \(/.exec(name);
+    return match ? { base: match[1], index: match[2] } : undefined;
+}
+
+function caseKey(file: string, base: string, index: string): string {
+    return `${testKey(file, base)}::${index}`;
+}
+
+/** One result for a test item, combining the cases of a parameterized test. */
+function combinedResult(results: TestResult[]): TestResult {
+    const chosen =
+        results.find((r) => r.status === 'failed') ??
+        results.find((r) => r.status === 'passed') ??
+        results[0];
+    const durations = results
+        .map((r) => r.duration)
+        .filter((duration): duration is number => duration !== undefined);
+    if (durations.length === 0) {
+        return chosen;
+    }
+    return { ...chosen, duration: durations.reduce((total, duration) => total + duration, 0) };
+}
+
 /**
  * The Test Run Orchestrator: turns a TestRunRequest into one framework invocation per Godot
  * project and publishes the parsed results into the TestRun.
@@ -114,11 +139,11 @@ export class RunOrchestrator {
         coverage: boolean,
     ): Promise<void> {
         const known = this.tree.fileItems(project).flatMap((fileItem) => {
-            const tests: { file: string; name: string }[] = [];
+            const tests: { file: string; name: string; runName?: string }[] = [];
             fileItem.children.forEach((child) => {
                 const data = this.tree.getData(child);
                 if (data?.kind === 'test') {
-                    tests.push({ file: data.file, name: data.name });
+                    tests.push({ file: data.file, name: data.name, runName: data.runName });
                 }
             });
             return tests;
@@ -129,12 +154,22 @@ export class RunOrchestrator {
         }
 
         // Captured up front: results must go to these items even if the tree is re-parsed mid-run.
-        const byKey = new Map(
-            plan.tests.flatMap((t) => {
-                const item = this.tree.findTest(t.file, t.name);
-                return item ? [[testKey(t.file, t.name), item] as const] : [];
-            }),
-        );
+        const byKey = new Map<string, vscode.TestItem>();
+        const byCase = new Map<string, vscode.TestItem>();
+        const byBase = new Map<string, vscode.TestItem>();
+        for (const test of plan.tests) {
+            const item = this.tree.findTest(test.file, test.name);
+            if (!item) {
+                continue;
+            }
+            byKey.set(testKey(test.file, test.name), item);
+            const parsed = parameterCase(test.name);
+            if (parsed) {
+                byCase.set(caseKey(test.file, parsed.base, parsed.index), item);
+            } else {
+                byBase.set(testKey(test.file, test.runName ?? test.name), item);
+            }
+        }
         const items = [...byKey.values()];
         items.forEach((item) => run.started(item));
 
@@ -206,14 +241,25 @@ export class RunOrchestrator {
             }
             this.log(`${project.adapter.displayName} exited with code ${result.exitCode ?? 'n/a'}`);
 
-            const reported = new Set<vscode.TestItem>();
+            const found = new Map<vscode.TestItem, TestResult[]>();
             for (const testResult of project.adapter.parseResults(result.stdout, project.root)) {
-                const item =
-                    testResult.file && byKey.get(testKey(testResult.file, testResult.name));
-                if (item) {
-                    this.publish(run, item, testResult);
-                    reported.add(item);
+                const file = testResult.file;
+                if (!file) {
+                    continue;
                 }
+                const parsed = parameterCase(testResult.name);
+                const item =
+                    byKey.get(testKey(file, testResult.name)) ??
+                    (parsed ? byCase.get(caseKey(file, parsed.base, parsed.index)) : undefined) ??
+                    byBase.get(testKey(file, parsed?.base ?? testResult.name));
+                if (item) {
+                    found.set(item, [...(found.get(item) ?? []), testResult]);
+                }
+            }
+
+            const reported = new Set(found.keys());
+            for (const [item, results] of found) {
+                this.publish(run, item, combinedResult(results));
             }
 
             for (const item of items.filter((i) => !reported.has(i))) {
@@ -334,7 +380,7 @@ export class RunOrchestrator {
                 run.passed(item, result.duration);
                 break;
             case 'skipped':
-                run.skipped(item);
+                run.passed(item, result.duration);
                 break;
             case 'failed': {
                 const message = new vscode.TestMessage(result.message ?? 'Test failed.');

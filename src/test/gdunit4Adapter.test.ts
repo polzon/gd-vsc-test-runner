@@ -55,6 +55,65 @@ suite('GdUnit4 Adapter', () => {
         ]);
     });
 
+    test('discovers each inline parameter set as its own test', async () => {
+        const content = [
+            'extends GdUnitTestSuite',
+            '',
+            'func test_even(',
+            '\tvalue: int,',
+            '\t_test_parameters := [',
+            '\t\t[2, "two"],',
+            '\t\t[4, "four"],',
+            '\t]',
+            ') -> void:',
+            '\tassert_int(value % 2).is_equal(0)',
+        ].join('\n');
+        const cases = await gdunit4Adapter.discovery.parseTestCases(content);
+        assert.deepStrictEqual(
+            cases.map((c) => [c.name, c.runName]),
+            [
+                ["test_even:0 (2, 'two')", 'test_even'],
+                ["test_even:1 (4, 'four')", 'test_even'],
+            ],
+        );
+    });
+
+    test('normalizes compact parameter sets like GdUnit4 prints them', async () => {
+        const content = [
+            'extends GdUnitTestSuite',
+            '',
+            'func test_pair(',
+            '\tleft: int,',
+            '\tright: int,',
+            '\t_test_parameters := [[1,2],[3,4]],',
+            ') -> void:',
+            '\tassert_bool(true).is_true()',
+        ].join('\n');
+        const cases = await gdunit4Adapter.discovery.parseTestCases(content);
+        assert.deepStrictEqual(
+            cases.map((c) => c.name),
+            ['test_pair:0 (1, 2)', 'test_pair:1 (3, 4)'],
+        );
+    });
+
+    test('leaves a parameter source it cannot evaluate as one test', async () => {
+        const content = [
+            'extends GdUnitTestSuite',
+            'const CASES := [[1], [2]]',
+            '',
+            'func test_from_property(',
+            '\tvalue: int,',
+            '\t_test_parameters := CASES,',
+            ') -> void:',
+            '\tassert_int(value).is_greater(0)',
+        ].join('\n');
+        const cases = await gdunit4Adapter.discovery.parseTestCases(content);
+        assert.deepStrictEqual(
+            cases.map((c) => [c.name, c.runName]),
+            [['test_from_property', undefined]],
+        );
+    });
+
     test('ignores files that do not extend GdUnitTestSuite', async () => {
         const cases = await gdunit4Adapter.discovery.parseTestCases(
             'extends Node\n\nfunc test_x():\n\tpass\n',
