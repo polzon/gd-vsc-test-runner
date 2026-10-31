@@ -1,54 +1,10 @@
 import * as assert from 'assert';
-import * as path from 'path';
 import * as vscode from 'vscode';
 import { getDetailedCoverage } from '../coverage/coverageStore';
 import type { ExtensionApi } from '../extension';
-import { RunOrchestrator } from '../testing/runOrchestrator';
-
-const DEMO_PROJECT = path.resolve(__dirname, '../../src/demo/gdunit4-adapter-demo');
-const SUITE_FILE = path.join(DEMO_PROJECT, 'test', 'test_example_test.gd');
-const CALCULATOR_TEST = path.join(DEMO_PROJECT, 'test', 'test_calculator.gd');
-const CALCULATOR_SCRIPT = path.join(DEMO_PROJECT, 'src', 'calculator.gd');
-
-type Outcome = 'started' | 'passed' | 'failed' | 'errored' | 'skipped';
-
-/** Records what the orchestrator publishes, keyed by TestItem label. */
-function recordingController() {
-    const outcomes = new Map<string, Outcome>();
-    const outcomesById = new Map<string, Outcome>();
-    const messages = new Map<string, vscode.TestMessage>();
-    const coverages: vscode.FileCoverage[] = [];
-    const set =
-        (outcome: Outcome) =>
-        (item: vscode.TestItem, message?: vscode.TestMessage | readonly vscode.TestMessage[]) => {
-            outcomes.set(item.label, outcome);
-            outcomesById.set(item.id, outcome);
-            if (message) {
-                messages.set(
-                    item.label,
-                    Array.isArray(message) ? message[0] : (message as vscode.TestMessage),
-                );
-            }
-        };
-    const run = {
-        started: set('started'),
-        passed: set('passed'),
-        failed: set('failed'),
-        errored: set('errored'),
-        skipped: set('skipped'),
-        enqueued: () => {},
-        appendOutput: () => {},
-        addCoverage: (coverage: vscode.FileCoverage) => coverages.push(coverage),
-        end: () => {},
-    } as unknown as vscode.TestRun;
-    return {
-        controller: { createTestRun: () => run },
-        outcomes,
-        outcomesById,
-        messages,
-        coverages,
-    };
-}
+import { RunOptions, RunOrchestrator } from '../testExplorer/runOrchestrator';
+import { CALCULATOR_SCRIPT, CALCULATOR_TEST, SUITE_FILE } from './demoProject';
+import { recordingController } from './helpers/recordingController';
 
 /**
  * Runs inside the Extension Development Host with the demo Godot project opened
@@ -57,6 +13,19 @@ function recordingController() {
 suite('Extension (demo project)', function () {
     this.timeout(120_000);
     let api: ExtensionApi;
+
+    async function runTests(
+        recorder: ReturnType<typeof recordingController>,
+        items?: readonly vscode.TestItem[],
+        options?: RunOptions,
+    ): Promise<void> {
+        const orchestrator = new RunOrchestrator(recorder.controller, api.tree, () => {});
+        await orchestrator.run(
+            new vscode.TestRunRequest(items),
+            new vscode.CancellationTokenSource().token,
+            options,
+        );
+    }
 
     suiteSetup(async () => {
         const extension = vscode.extensions.getExtension<ExtensionApi>(
@@ -126,11 +95,7 @@ suite('Extension (demo project)', function () {
 
     test('runs the whole project and publishes results', async () => {
         const recorder = recordingController();
-        const orchestrator = new RunOrchestrator(recorder.controller, api.tree, () => {});
-        await orchestrator.run(
-            new vscode.TestRunRequest(),
-            new vscode.CancellationTokenSource().token,
-        );
+        await runTests(recorder);
 
         assert.strictEqual(
             recorder.outcomes.get('test_success'),
@@ -160,13 +125,9 @@ suite('Extension (demo project)', function () {
 
     test('runs only the requested test', async () => {
         const recorder = recordingController();
-        const orchestrator = new RunOrchestrator(recorder.controller, api.tree, () => {});
         const item = api.tree.findTest(SUITE_FILE, 'test_success');
         assert.ok(item);
-        await orchestrator.run(
-            new vscode.TestRunRequest([item]),
-            new vscode.CancellationTokenSource().token,
-        );
+        await runTests(recorder, [item]);
 
         assert.deepStrictEqual(
             [...recorder.outcomes.entries()],
@@ -177,26 +138,18 @@ suite('Extension (demo project)', function () {
 
     test('runs one parameter set of a parameterized test', async () => {
         const recorder = recordingController();
-        const orchestrator = new RunOrchestrator(recorder.controller, api.tree, () => {});
         const item = api.tree.findTest(CALCULATOR_TEST, 'test_rank_positive:2 (3)');
         assert.ok(item);
-        await orchestrator.run(
-            new vscode.TestRunRequest([item]),
-            new vscode.CancellationTokenSource().token,
-        );
+        await runTests(recorder, [item]);
 
         assert.deepStrictEqual([...recorder.outcomesById.entries()], [[item.id, 'passed']]);
     });
 
     test('runs every parameter set when the parent test is selected', async () => {
         const recorder = recordingController();
-        const orchestrator = new RunOrchestrator(recorder.controller, api.tree, () => {});
         const child = api.tree.findTest(CALCULATOR_TEST, 'test_rank_positive:0 (1)');
         assert.ok(child?.parent);
-        await orchestrator.run(
-            new vscode.TestRunRequest([child.parent]),
-            new vscode.CancellationTokenSource().token,
-        );
+        await runTests(recorder, [child.parent]);
 
         for (const name of [
             'test_rank_positive:0 (1)',
@@ -211,14 +164,9 @@ suite('Extension (demo project)', function () {
 
     test('a coverage run reports taken and untaken lines', async () => {
         const recorder = recordingController();
-        const orchestrator = new RunOrchestrator(recorder.controller, api.tree, () => {});
         const item = api.tree.findTest(CALCULATOR_TEST, 'test_describe_positive');
         assert.ok(item);
-        await orchestrator.run(
-            new vscode.TestRunRequest([item]),
-            new vscode.CancellationTokenSource().token,
-            { coverage: true },
-        );
+        await runTests(recorder, [item], { coverage: true });
 
         assert.strictEqual(recorder.outcomes.get('test_describe_positive'), 'passed');
         const coverage = recorder.coverages.find((entry) => entry.uri.fsPath === CALCULATOR_SCRIPT);

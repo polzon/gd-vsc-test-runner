@@ -35,6 +35,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check out and sync GdUnit4 addon
+        run: npm run demo:addon
+
       - name: Check formatting
         run: npm run format:check
 
@@ -70,7 +73,7 @@ jobs:
           godot --version
 
       - name: Import demo project
-        run: godot --headless --path src/demo/gdunit4-adapter-demo --import
+        run: godot --headless --path src/test/demo/gdunit4-adapter-demo --import
 
       # The tests launch both VS Code and a non-headless Godot instance
       # (GdUnit4 rejects headless mode), so they need an Xvfb display.

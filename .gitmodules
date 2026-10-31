@@ -1,0 +1,3 @@
+[submodule "src/test/vendor/gdUnit4"]
+	path = src/test/vendor/gdUnit4
+	url = https://github.com/godot-gdunit-labs/gdUnit4.git

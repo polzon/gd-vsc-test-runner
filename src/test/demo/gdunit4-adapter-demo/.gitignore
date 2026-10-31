@@ -1,0 +1,6 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Synced from src/test/vendor/gdUnit4 by `npm run demo:addon`.
+/addons/gdUnit4/

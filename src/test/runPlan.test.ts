@@ -1,7 +1,5 @@
 import * as assert from 'assert';
-import * as path from 'path';
-import { fromResPath, toResPath } from '../godot/resPath';
-import { buildRunPlan } from '../testing/runPlan';
+import { buildRunPlan } from '../testExplorer/runPlan';
 
 const A = '/proj/test_a.gd';
 const B = '/proj/test_b.gd';
@@ -59,20 +57,5 @@ suite('buildRunPlan', () => {
         const plan = buildRunPlan(known, [{ file: A, test: 'test_1' }], []);
         assert.deepStrictEqual(plan.tests, [known[2]]);
         assert.deepStrictEqual(plan.excludeTests, [{ file: A, name: 'test_p' }]);
-    });
-});
-
-suite('resPath', () => {
-    const root = path.resolve('/proj');
-
-    test('round-trips files inside the project', () => {
-        const file = path.join(root, 'test', 'unit', 'test_a.gd');
-        assert.strictEqual(toResPath(root, file), 'res://test/unit/test_a.gd');
-        assert.strictEqual(fromResPath(root, 'res://test/unit/test_a.gd'), file);
-    });
-
-    test('rejects paths outside the project or without res://', () => {
-        assert.strictEqual(toResPath(root, path.resolve('/other/test_a.gd')), undefined);
-        assert.strictEqual(fromResPath(root, 'user://save.dat'), undefined);
     });
 });

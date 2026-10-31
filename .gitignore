@@ -4,4 +4,4 @@ node_modules
 .vscode-test/
 *.vsix
 
-demo/reports
+src/test/demo/gdunit4-adapter-demo/reports

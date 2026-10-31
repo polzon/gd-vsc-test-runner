@@ -1,12 +1,10 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
-import { gdunit4Adapter } from '../adapters/gdunit4Adapter';
+import { gdunit4Adapter } from '../adapters/gdunit4';
 import { resolveGodot } from '../godot/godotResolver';
 import { runGodot } from '../godot/runGodot';
-
-const DEMO_PROJECT = path.resolve(__dirname, '../../src/demo/gdunit4-adapter-demo');
-const SUITE_FILE = path.join(DEMO_PROJECT, 'test', 'test_example_test.gd');
+import { DEMO_PROJECT, SUITE_FILE } from './demoProject';
 
 /**
  * End-to-end: build args → run the real Godot + GdUnit4 → parse stdout.

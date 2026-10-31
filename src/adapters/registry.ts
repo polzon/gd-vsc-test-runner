@@ -1,4 +1,4 @@
-import { gdunit4Adapter } from './gdunit4Adapter';
+import { gdunit4Adapter } from './gdunit4';
 import { TestFrameworkAdapter } from './types';
 
 /** Adapters tried, in order, when detecting a project's test framework. */

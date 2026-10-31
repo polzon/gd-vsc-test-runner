@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import { getDetailedCoverage } from './coverage/coverageStore';
 import { getConfiguredGodotPath } from './godot/configuration';
 import { resolveGodot } from './godot/godotResolver';
-import { RunOrchestrator } from './testing/runOrchestrator';
-import { TestTree } from './testing/testTree';
+import { RunOrchestrator } from './testExplorer/runOrchestrator';
+import { TestTree } from './testExplorer/testTree';
 
 /** Exposed to the extension's own integration tests. */
 export interface ExtensionApi {
