@@ -68,4 +68,47 @@ suite('GdScriptClassResolver', () => {
         );
         assert.strictEqual(await resolver.find('Missing'), undefined);
     });
+
+    test('keeps path-based targets inside the project', async () => {
+        const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'class-resolver-outside-'));
+        try {
+            const root = path.join(parent, 'project');
+            const testDir = path.join(root, 'test');
+            fs.mkdirSync(testDir, { recursive: true });
+            const outside = path.join(parent, 'outside.gd');
+            fs.writeFileSync(outside, 'extends GdUnitTestSuite\n');
+            const file = path.join(testDir, 'test_leaf.gd');
+
+            const resolver = new GdScriptClassResolver(root);
+            assert.deepStrictEqual(await resolver.lineage('extends "../outside.gd"\n', file), ['../outside.gd']);
+            assert.deepStrictEqual(await resolver.lineage('extends "res://../outside.gd"\n', file), ['res://../outside.gd']);
+            assert.deepStrictEqual(await resolver.lineage(`extends "${outside}"\n`, file), [outside]);
+        } finally {
+            fs.rmSync(parent, { recursive: true, force: true });
+        }
+    });
+
+    test('picks up class_name declarations added after the index was built', async () => {
+        const root = project({ 'test/test_leaf.gd': 'extends Later\n' });
+        const resolver = new GdScriptClassResolver(root);
+        assert.strictEqual(await resolver.find('Later'), undefined);
+
+        fs.writeFileSync(path.join(root, 'test', 'later.gd'), 'class_name Later\nextends Node\n');
+        resolver.invalidate();
+        assert.strictEqual(await resolver.find('Later'), path.join(root, 'test', 'later.gd'));
+    });
+
+    test('forgets a moved class_name when invalidated', async () => {
+        const root = project({
+            'test/old.gd': 'class_name Moved\nextends Node\n',
+            'test/new.gd': 'extends Node\n',
+        });
+        const resolver = new GdScriptClassResolver(root);
+        assert.strictEqual(await resolver.find('Moved'), path.join(root, 'test', 'old.gd'));
+
+        fs.writeFileSync(path.join(root, 'test', 'old.gd'), 'extends Node\n');
+        fs.writeFileSync(path.join(root, 'test', 'new.gd'), 'class_name Moved\nextends Node\n');
+        resolver.invalidate();
+        assert.strictEqual(await resolver.find('Moved'), path.join(root, 'test', 'new.gd'));
+    });
 });

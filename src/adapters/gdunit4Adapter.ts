@@ -82,6 +82,9 @@ function lastBodyLine(lines: string[], start: number): number {
 const discovery: DiscoveryRules = {
     fileFilter: '**/test_*.gd',
     parseTestCases,
+    invalidate(projectRoot: string): void {
+        classResolver(projectRoot).invalidate();
+    },
 };
 
 async function pathExists(target: string): Promise<boolean> {

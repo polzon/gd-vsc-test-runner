@@ -185,20 +185,34 @@ export class TestTree implements vscode.Disposable {
     private watch(project: GodotProject): void {
         const pattern = new vscode.RelativePattern(project.root, project.adapter.discovery.fileFilter);
         const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+        const invalidate = (): void => project.adapter.discovery.invalidate?.(project.root);
         watcher.onDidCreate((uri) => {
+            invalidate();
             const item = this.getOrCreateFile(project, uri);
             if (item) {
                 void this.resolveFile(item);
             }
         });
         watcher.onDidChange((uri) => {
+            invalidate();
             const item = this.controller.items.get(uri.toString());
             if (item) {
                 void this.resolveFile(item);
             }
         });
-        watcher.onDidDelete((uri) => this.controller.items.delete(uri.toString()));
+        watcher.onDidDelete((uri) => {
+            invalidate();
+            this.controller.items.delete(uri.toString());
+        });
         this.watchers.push(watcher);
+
+        const sources = vscode.workspace.createFileSystemWatcher(
+            new vscode.RelativePattern(project.root, '**/*.gd'),
+        );
+        sources.onDidCreate(invalidate);
+        sources.onDidChange(invalidate);
+        sources.onDidDelete(invalidate);
+        this.watchers.push(sources);
     }
 
     private onDocument(doc: vscode.TextDocument): void {

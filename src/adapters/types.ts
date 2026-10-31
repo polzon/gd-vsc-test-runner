@@ -67,6 +67,8 @@ export interface DiscoveryRules {
     fileFilter: string;
     /** Extract test cases from file contents. */
     parseTestCases(content: string, context?: DiscoveryContext): Promise<TestCaseDescriptor[]>;
+    /** Drop any cached cross-file state after project scripts change. */
+    invalidate?(projectRoot: string): void;
 }
 
 /**
