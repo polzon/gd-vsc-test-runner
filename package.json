@@ -2,7 +2,7 @@
   "name": "gdscript-test-runner",
   "displayName": "gdscript-test-runner",
   "description": "gdUnit4 test runner for GDScript tests",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "polzon",
   "repository": {
     "type": "git",

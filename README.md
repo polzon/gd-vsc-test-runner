@@ -55,4 +55,4 @@ Anything under `addons/` and `.godot/` is ignored during discovery.
 - `npm install`
 - `npm run compile`
 - `npx @vscode/vsce package`
-- `code --install-extension .\gdscript-test-runner-0.0.1.vsix`
+- `code --install-extension .\gdscript-test-runner-0.0.2.vsix`
