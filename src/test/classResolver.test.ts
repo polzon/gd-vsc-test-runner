@@ -4,8 +4,11 @@ import * as os from 'os';
 import * as path from 'path';
 import { baseTarget, GdScriptClassResolver } from '../godot/classResolver';
 
+const roots: string[] = [];
+
 function project(files: Record<string, string>): string {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'class-resolver-'));
+    roots.push(root);
     for (const [relative, content] of Object.entries(files)) {
         const file = path.join(root, relative);
         fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -15,6 +18,10 @@ function project(files: Record<string, string>): string {
 }
 
 suite('GdScriptClassResolver', () => {
+    teardown(() => {
+        roots.splice(0).forEach((root) => fs.rmSync(root, { recursive: true, force: true }));
+    });
+
     test('reads a direct base class, an inline class_name base and a path base', () => {
         assert.strictEqual(baseTarget('extends Node\n'), 'Node');
         assert.strictEqual(baseTarget('class_name Foo extends Bar\n'), 'Bar');

@@ -1,17 +1,12 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
-import * as path from 'path';
 import { gdunit4Adapter } from '../adapters/gdunit4';
 import { executableLines } from '../coverage/executableLines';
 import { collectLineHits } from '../coverage/lineCollector';
 import { DebuggerServer } from '../godot/debuggerServer';
 import { resolveGodot } from '../godot/godotResolver';
 import { runGodot } from '../godot/runGodot';
-
-const DEMO_PROJECT = path.resolve(__dirname, '../../src/demo/gdunit4-adapter-demo');
-const CALCULATOR = path.join(DEMO_PROJECT, 'src', 'calculator.gd');
-const CALCULATOR_RES = 'res://src/calculator.gd';
-const CALCULATOR_TEST = path.join(DEMO_PROJECT, 'test', 'test_calculator.gd');
+import { CALCULATOR_RES, CALCULATOR_SCRIPT, CALCULATOR_TEST, DEMO_PROJECT } from './demoProject';
 
 /**
  * End-to-end coverage: listen, run the tests with the debugger pointed at us, collect the
@@ -24,7 +19,7 @@ suite('Coverage run against the demo project', function () {
         const godot = resolveGodot(undefined);
         assert.ok(godot.ok, 'godot must be on PATH');
 
-        const source = fs.readFileSync(CALCULATOR, 'utf-8');
+        const source = fs.readFileSync(CALCULATOR_SCRIPT, 'utf-8');
         const executable = executableLines(source);
         assert.ok(executable.includes(5), `executable lines: ${executable.join(', ')}`);
         assert.ok(executable.includes(8), `executable lines: ${executable.join(', ')}`);
