@@ -15,6 +15,10 @@ export interface SourceRange {
 export interface TestCaseDescriptor {
     name: string;
     range: SourceRange;
+    /** Text shown in the tree when it differs from `name`, e.g. a parameter set. */
+    label?: string;
+    /** Parent test case of this parameter set, e.g. the parameterized function. */
+    parentName?: string;
     /**
      * The function shared by every case of a parameterized test. Set only for
      * individual parameter sets; the framework filters by this name.

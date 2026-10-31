@@ -70,10 +70,10 @@ suite('GdUnit4 Adapter', () => {
         ].join('\n');
         const cases = await gdunit4Adapter.discovery.parseTestCases(content);
         assert.deepStrictEqual(
-            cases.map((c) => [c.name, c.runName]),
+            cases.map((c) => [c.name, c.label, c.parentName, c.runName]),
             [
-                ["test_even:0 (2, 'two')", 'test_even'],
-                ["test_even:1 (4, 'four')", 'test_even'],
+                ["test_even:0 (2, 'two')", "2, 'two'", 'test_even', 'test_even'],
+                ["test_even:1 (4, 'four')", "4, 'four'", 'test_even', 'test_even'],
             ],
         );
     });

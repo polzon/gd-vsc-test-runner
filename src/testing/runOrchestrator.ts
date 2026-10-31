@@ -138,16 +138,20 @@ export class RunOrchestrator {
         token: vscode.CancellationToken,
         coverage: boolean,
     ): Promise<void> {
-        const known = this.tree.fileItems(project).flatMap((fileItem) => {
-            const tests: { file: string; name: string; runName?: string }[] = [];
-            fileItem.children.forEach((child) => {
-                const data = this.tree.getData(child);
-                if (data?.kind === 'test') {
-                    tests.push({ file: data.file, name: data.name, runName: data.runName });
-                }
-            });
-            return tests;
-        });
+        const known: { file: string; name: string; runName?: string }[] = [];
+        for (const fileItem of this.tree.fileItems(project)) {
+            const visit = (collection: vscode.TestItemCollection): void => {
+                collection.forEach((child) => {
+                    const data = this.tree.getData(child);
+                    if (data?.kind === 'test') {
+                        known.push({ file: data.file, name: data.name, runName: data.runName });
+                    } else if (child.children.size > 0) {
+                        visit(child.children);
+                    }
+                });
+            };
+            visit(fileItem.children);
+        }
         const plan = buildRunPlan(known, include, exclude);
         if (plan.tests.length === 0) {
             return;
@@ -405,8 +409,17 @@ export class RunOrchestrator {
     ): void {
         this.log(`Cannot run tests: ${reason}`);
         const message = new vscode.TestMessage(`Cannot run tests: ${reason}`);
+        const report = (collection: vscode.TestItemCollection): void => {
+            collection.forEach((child) => {
+                if (child.children.size > 0) {
+                    report(child.children);
+                } else {
+                    run.errored(child, message);
+                }
+            });
+        };
         for (const fileItem of this.fileItemsOf(include)) {
-            fileItem.children.forEach((child) => run.errored(child, message));
+            report(fileItem.children);
         }
         const openSettings = 'Open Settings';
         void vscode.window
@@ -441,6 +454,16 @@ export class RunOrchestrator {
             }
             if (data.kind === 'test') {
                 return [{ file: data.file, test: data.name }];
+            }
+            if (data.kind === 'testGroup') {
+                const selections: Selection[] = [];
+                item.children.forEach((child) => {
+                    const childData = this.tree.getData(child);
+                    if (childData?.kind === 'test') {
+                        selections.push({ file: childData.file, test: childData.name });
+                    }
+                });
+                return selections;
             }
             if (data.kind === 'file') {
                 return [{ file: data.file }];

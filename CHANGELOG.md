@@ -17,5 +17,5 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Fixed
 
-- Parameterized GdUnit4 tests show one test per parameter set instead of a "reported no result" failure. Skipped
-  tests report as passes.
+- Parameterized GdUnit4 tests show a parent test with one child per parameter set instead of a "reported no result"
+  failure. Skipped tests report as passes.

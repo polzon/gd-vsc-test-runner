@@ -15,12 +15,14 @@ type Outcome = 'started' | 'passed' | 'failed' | 'errored' | 'skipped';
 /** Records what the orchestrator publishes, keyed by TestItem label. */
 function recordingController() {
     const outcomes = new Map<string, Outcome>();
+    const outcomesById = new Map<string, Outcome>();
     const messages = new Map<string, vscode.TestMessage>();
     const coverages: vscode.FileCoverage[] = [];
     const set =
         (outcome: Outcome) =>
         (item: vscode.TestItem, message?: vscode.TestMessage | readonly vscode.TestMessage[]) => {
             outcomes.set(item.label, outcome);
+            outcomesById.set(item.id, outcome);
             if (message) {
                 messages.set(
                     item.label,
@@ -39,7 +41,13 @@ function recordingController() {
         addCoverage: (coverage: vscode.FileCoverage) => coverages.push(coverage),
         end: () => {},
     } as unknown as vscode.TestRun;
-    return { controller: { createTestRun: () => run }, outcomes, messages, coverages };
+    return {
+        controller: { createTestRun: () => run },
+        outcomes,
+        outcomesById,
+        messages,
+        coverages,
+    };
 }
 
 /**
@@ -94,11 +102,16 @@ suite('Extension (demo project)', function () {
         calculator.children.forEach((child) => names.push(child.label));
         assert.deepStrictEqual(names.sort(), [
             'test_describe_positive',
-            'test_rank_positive:0 (1)',
-            'test_rank_positive:1 (2)',
-            'test_rank_positive:2 (3)',
+            'test_rank_positive',
             'test_rank_zero',
         ]);
+        const parent = [...calculator.children].find(
+            ([, child]) => child.label === 'test_rank_positive',
+        )?.[1];
+        assert.ok(parent, 'test_rank_positive is a parent test item');
+        const parameterLabels: string[] = [];
+        parent.children.forEach((child) => parameterLabels.push(child.label));
+        assert.deepStrictEqual(parameterLabels.sort(), ['1', '2', '3']);
     });
 
     test('refreshing keeps existing items instead of recreating them', async () => {
@@ -135,7 +148,9 @@ suite('Extension (demo project)', function () {
             'test_rank_positive:1 (2)',
             'test_rank_positive:2 (3)',
         ]) {
-            assert.strictEqual(recorder.outcomes.get(name), 'passed', name);
+            const item = api.tree.findTest(CALCULATOR_TEST, name);
+            assert.ok(item, name);
+            assert.strictEqual(recorder.outcomesById.get(item.id), 'passed', name);
         }
         assert.deepStrictEqual(
             [...recorder.outcomes.entries()].filter(([, outcome]) => outcome === 'errored'),
@@ -170,10 +185,28 @@ suite('Extension (demo project)', function () {
             new vscode.CancellationTokenSource().token,
         );
 
-        assert.deepStrictEqual(
-            [...recorder.outcomes.entries()],
-            [['test_rank_positive:2 (3)', 'passed']],
+        assert.deepStrictEqual([...recorder.outcomesById.entries()], [[item.id, 'passed']]);
+    });
+
+    test('runs every parameter set when the parent test is selected', async () => {
+        const recorder = recordingController();
+        const orchestrator = new RunOrchestrator(recorder.controller, api.tree, () => {});
+        const child = api.tree.findTest(CALCULATOR_TEST, 'test_rank_positive:0 (1)');
+        assert.ok(child?.parent);
+        await orchestrator.run(
+            new vscode.TestRunRequest([child.parent]),
+            new vscode.CancellationTokenSource().token,
         );
+
+        for (const name of [
+            'test_rank_positive:0 (1)',
+            'test_rank_positive:1 (2)',
+            'test_rank_positive:2 (3)',
+        ]) {
+            const item = api.tree.findTest(CALCULATOR_TEST, name);
+            assert.ok(item, name);
+            assert.strictEqual(recorder.outcomesById.get(item.id), 'passed', name);
+        }
     });
 
     test('a coverage run reports taken and untaken lines', async () => {

@@ -291,6 +291,8 @@ async function parseTestCases(
             parameters.forEach((parameter, parameterIndex) => {
                 cases.push({
                     name: `${match[1]}:${parameterIndex} (${parameter})`,
+                    label: parameter,
+                    parentName: match[1],
                     runName: match[1],
                     range,
                 });
